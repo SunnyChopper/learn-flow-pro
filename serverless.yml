@@ -1,0 +1,194 @@
+service: learnflow-pro
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs16.x
+  region: us-east-1
+  environment:
+    REACT_APP_OPENAI_API_KEY: ${env:REACT_APP_OPENAI_API_KEY}
+    REACT_APP_IDENTITY_POOL_ID: ${env:REACT_APP_IDENTITY_POOL_ID}
+    REACT_APP_USER_POOL_REGION: ${env:REACT_APP_USER_POOL_REGION}
+    REACT_APP_USER_POOL_ID: ${env:REACT_APP_USER_POOL_ID}
+    REACT_APP_USER_POOL_CLIENT_ID: ${env:REACT_APP_USER_POOL_CLIENT_ID}
+  #   REACT_APP_DB_HOST:
+  #     'Fn::ImportValue': REACT_APP_DB_HOST
+  #   REACT_APP_DB_PORT:
+  #     'Fn::ImportValue': REACT_APP_DB_PORT
+  #   REACT_APP_DB_NAME:
+  #     'Fn::ImportValue': REACT_APP_DB_NAME
+  #   REACT_APP_DB_USERNAME:
+  #     'Fn::ImportValue': REACT_APP_DB_USERNAME
+  #   REACT_APP_DB_PASSWORD:
+  #     'Fn::ImportValue': REACT_APP_DB_PASSWORD
+    
+# you can add statements to the Lambda function's IAM Role here
+#  iam:
+#    role:
+#      statements:
+#        - Effect: "Allow"
+#          Action:
+#            - "s3:ListBucket"
+#          Resource: { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "ServerlessDeploymentBucket" } ] ]  }
+#        - Effect: "Allow"
+#          Action:
+#            - "s3:PutObject"
+#          Resource:
+#            Fn::Join:
+#              - ""
+#              - - "arn:aws:s3:::"
+#                - "Ref" : "ServerlessDeploymentBucket"
+#                - "/*"
+
+# layers:
+#   shared:
+#     path: src/nodejs
+#     name: learnflow-pro-shared
+#     description: Shared services layer for LearnFlow Pro
+#     compatibleRuntimes:
+#       - nodejs16.x
+#     retain: false
+
+package:
+  exclude:
+    - node_modules/**
+    - .gitignore
+    - .git/**
+
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-offline
+
+resources:
+  Resources:
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: learnflow-pro-userpool
+        MfaConfiguration: OFF
+        UsernameAttributes:
+          - email
+        AutoVerifiedAttributes:
+          - email
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireLowercase: true
+            RequireNumbers: true
+            RequireSymbols: false
+            RequireUppercase: true
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: learnflow-pro-userpool-client
+        GenerateSecret: False
+        UserPoolId:
+          Ref: CognitoUserPool
+    CognitoIdentityPool:
+      Type: AWS::Cognito::IdentityPool
+      Properties:
+        IdentityPoolName: learnflow-pro-identitypool
+        AllowUnauthenticatedIdentities: false
+        CognitoIdentityProviders:
+          - ClientId:
+              Ref: CognitoUserPoolClient
+            ProviderName:
+              Fn::GetAtt:
+                - CognitoUserPool
+                - ProviderName
+    LambdaExecutionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: LambdaCloudWatchAccessPolicy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: "arn:aws:logs:*:*:*"
+    UserDataTable:
+      Type: AWS::RDS::DBInstance
+      Properties:
+        DBName: learnflow_pro
+        AllocatedStorage: 20
+        DBInstanceClass: db.t3.micro
+        Engine: MySQL
+        EngineVersion: "5.7"
+        MasterUsername: admin         # replace later
+        MasterUserPassword: admin123  # replace later
+        PubliclyAccessible: true
+        StorageType: gp2
+        MultiAZ: false
+    ApiGatewayAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        Name: learnflow-pro-authorizermethod.request.header.Authorization
+        IdentitySource: method.request.header.Authorization
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        Type: COGNITO_USER_POOLS
+        ProviderARNs:
+          - Fn::GetAtt:
+              - CognitoUserPool
+              - Arn
+
+functions:
+  # --- Auth --- #
+  preSignUp:
+    handler: src/handlers/Auth.preSignUpHandler
+    events:
+      - cognitoUserPool:
+          pool: CognitoUserPool
+          trigger: PreSignUp
+
+  # --- Learning Sessions --- #
+  getLearningSessions:
+    handler: src/handlers/LearningSessions.getSessionsHandler
+    events:
+      - http:
+          path: /api/sessions
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  createLearningSession:
+    handler: src/handlers/LearningSessions.createSessionHandler
+    events:
+      - http:
+          path: /api/sessions
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+
+useDotenv: true
+custom:
+  dotenv:
+    include:
+      - REACT_APP_OPENAI_API_KEY
+      - REACT_APP_IDENTITY_POOL_ID
+      - REACT_APP_USER_POOL_REGION
+      - REACT_APP_USER_POOL_ID
+      - REACT_APP_USER_POOL_CLIENT_ID
