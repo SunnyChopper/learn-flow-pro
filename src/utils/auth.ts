@@ -79,6 +79,28 @@ export const changePassword = async (oldPassword: string, newPassword: string): 
     }
 }
 
+export const getCurrentUserJwtToken = async (): Promise<string> => {
+    try {
+        const currentSession = await Auth.currentSession();
+        const jwtToken: string = currentSession.getIdToken().getJwtToken();
+        return jwtToken;
+    } catch (error) {
+        console.log('error getting current user jwt token', error);
+        throw error;
+    }
+};
+
+export const getCurrentUserId = async (): Promise<string> => {
+    try {
+        const currentSession = await Auth.currentSession();
+        const userId: string = currentSession.getIdToken().payload.sub;
+        return userId;
+    } catch (error) {
+        console.log('error getting current user id', error);
+        throw error;
+    }
+};
+
 export const getCurrentUser = async (): Promise<CognitoUser> => {
     try {
         const user = await Auth.currentAuthenticatedUser();

@@ -14,19 +14,31 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
+    "strictNullChecks": true,
     "noFallthroughCasesInSwitch": true,
-    "module": "esnext",
+    "preserveConstEnums": true,
+    "noImplicitAny": true,
+    "sourceMap": true,
+    "types": ["node"],
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+    "experimentalDecorators": true,
+    "module": "commonjs",
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "outDir": ".build",
     "baseUrl": ".",
     "paths": {
-      "/opt/services/*": ["./src/nodejs/node_modules/services/*"],
+      "/opt/services/*": ["src/nodejs/node_modules/services/*"],
+      "src/*": ["src/*"],
     }
   },
   "include": [
-    "src"
+    "src/**/*",
+    "src",
+    "src/nodejs/node_modules/services/*"
   ]
 }

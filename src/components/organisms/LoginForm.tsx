@@ -24,6 +24,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onAlreadyLoggedIn, onLoginSuccess
 
     useEffect(() => {
         const checkAuth = async () => {
+            console.log('Checking auth...');
             try {
                 await Auth.currentAuthenticatedUser();
                 onAlreadyLoggedIn();
@@ -32,7 +33,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onAlreadyLoggedIn, onLoginSuccess
             }
         };
         checkAuth();
-    }, [onAlreadyLoggedIn]);
+    }, []);
 
     return (
         <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column' }}>

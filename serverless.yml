@@ -3,7 +3,7 @@ frameworkVersion: "3"
 
 provider:
   name: aws
-  runtime: nodejs16.x
+  runtime: nodejs18.x
   region: us-east-1
   environment:
     REACT_APP_OPENAI_API_KEY: ${env:REACT_APP_OPENAI_API_KEY}
@@ -11,6 +11,8 @@ provider:
     REACT_APP_USER_POOL_REGION: ${env:REACT_APP_USER_POOL_REGION}
     REACT_APP_USER_POOL_ID: ${env:REACT_APP_USER_POOL_ID}
     REACT_APP_USER_POOL_CLIENT_ID: ${env:REACT_APP_USER_POOL_CLIENT_ID}
+    REACT_APP_API_BASE_URL: ${env:REACT_APP_API_BASE_URL}
+    REACT_APP_MEDIUM_API_KEY: ${env:REACT_APP_MEDIUM_API_KEY}
   #   REACT_APP_DB_HOST:
   #     'Fn::ImportValue': REACT_APP_DB_HOST
   #   REACT_APP_DB_PORT:
@@ -40,24 +42,30 @@ provider:
 #                - "Ref" : "ServerlessDeploymentBucket"
 #                - "/*"
 
-# layers:
-#   shared:
-#     path: src/nodejs
-#     name: learnflow-pro-shared
-#     description: Shared services layer for LearnFlow Pro
-#     compatibleRuntimes:
-#       - nodejs16.x
-#     retain: false
-
-package:
-  exclude:
-    - node_modules/**
-    - .gitignore
-    - .git/**
+layers:
+  shared:
+    path: src/nodejs
+    name: learnflow-pro-shared
+    description: Shared services layer for LearnFlow Pro
+    compatibleRuntimes:
+      - nodejs18.x
+    retain: false
 
 plugins:
   - serverless-dotenv-plugin
   - serverless-offline
+  - serverless-esbuild
+
+package:
+  individually: true
+  excludeDevDependencies: true
+  include:
+    - src/**
+    - src/nodejs/node_modules/services/**
+  exclude:
+    - node_modules/**
+    - .gitignore
+    - .git/**
 
 resources:
   Resources:
@@ -96,6 +104,33 @@ resources:
               Fn::GetAtt:
                 - CognitoUserPool
                 - ProviderName
+    CognitoIdentityPoolRoles:
+      Type: AWS::Cognito::IdentityPoolRoleAttachment
+      Properties:
+        IdentityPoolId:
+          Ref: CognitoIdentityPool
+        Roles:
+          authenticated:
+            Fn::GetAtt:
+              - CognitoAuthRole
+              - Arn
+    CognitoAuthRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Federated: cognito-identity.amazonaws.com
+              Action:
+                - sts:AssumeRoleWithWebIdentity
+              Condition:
+                StringEquals:
+                  "cognito-identity.amazonaws.com:aud":
+                    Ref: CognitoIdentityPool
+                ForAnyValue:StringLike:
+                  "cognito-identity.amazonaws.com:amr": authenticated
     LambdaExecutionRole:
       Type: AWS::IAM::Role
       Properties:
@@ -154,8 +189,26 @@ functions:
           trigger: PreSignUp
 
   # --- Learning Sessions --- #
+  getLearningSession:
+    handler: src/handlers/Sessions.getSessionHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/sessions/{id}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
   getLearningSessions:
-    handler: src/handlers/LearningSessions.getSessionsHandler
+    handler: src/handlers/Sessions.getSessionsHandler
+    layers:
+      - !Ref SharedLambdaLayer
     events:
       - http:
           path: /api/sessions
@@ -169,7 +222,9 @@ functions:
               - email
               - sub
   createLearningSession:
-    handler: src/handlers/LearningSessions.createSessionHandler
+    handler: src/handlers/Sessions.createSessionHandler
+    layers:
+      - !Ref SharedLambdaLayer
     events:
       - http:
           path: /api/sessions
@@ -182,6 +237,164 @@ functions:
             claims:
               - email
               - sub
+  getArticlesForLearningSession:
+    handler: src/handlers/Articles.getArticlesHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/articles
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  createArticleForLearningSession:
+    handler: src/handlers/Articles.createArticleHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/articles
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  sortArticlesForLearningSession:
+    handler: src/handlers/Articles.sortArticlesHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/sessions/sort
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  generateNotesForArticle:
+    handler: src/handlers/Articles.generateNotesHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/articles/notes
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  getGoals:
+    handler: src/handlers/Goals.getGoalsHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/goals
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  createGoal:
+    handler: src/handlers/Goals.createGoalHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/goals
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  getKnowledgeBases:
+    handler: src/handlers/KnowledgeBases.getKnowledgeBasesHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/knowledge-bases
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  getKnowledgeBase:
+    handler: src/handlers/KnowledgeBases.getKnowledgeBaseHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/knowledge-bases/{knowledgeBaseId}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  getArticlesForKnowledgeBase:
+    handler: src/handlers/KnowledgeBases.getArticlesForKnowledgeBaseHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/knowledge-bases/{knowledgeBaseId}/articles
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  createKnowledgeBase:
+    handler: src/handlers/KnowledgeBases.createKnowledgeBaseHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/knowledge-bases
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  createKnowledgeBaseEntry:
+    handler: src/handlers/KnowledgeBases.createKnowledgeBaseEntryHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/knowledge-bases/entries
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
 
 useDotenv: true
 custom:
@@ -192,3 +405,5 @@ custom:
       - REACT_APP_USER_POOL_REGION
       - REACT_APP_USER_POOL_ID
       - REACT_APP_USER_POOL_CLIENT_ID
+      - REACT_APP_API_BASE_URL
+      - REACT_APP_MEDIUM_API_KEY
