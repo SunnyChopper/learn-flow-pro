@@ -15,8 +15,9 @@ import Header from 'src/components/organisms/Header';
 import {
     createArticleForSession,
     fetchArticlesForSession,
+    fetchNotesForSession,
     sortArticlesForSession,
-    generateNotesForArticle
+    generateNotesForArticle,
 } from 'src/api/articles';
 import { fetchLearningSession } from 'src/api/sessions';
 
@@ -26,12 +27,19 @@ import { SortedArticles } from 'src/contracts/SortArticles';
 // Entities
 import { LearningSession } from 'src/entity/LearningSession';
 import { Article } from 'src/entity/Article';
+import { Note } from 'src/entity/Note';
 
 
 interface ArticleInput {
     title: string;
     url: string;
     authors?: string;
+}
+
+interface SessionDetailsLoadingMap {
+    learningSession: boolean;
+    articles: boolean;
+    notes: boolean;
 }
 
 interface SessionDetailsPageProps {
@@ -42,11 +50,16 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     const params = useParams<{ sessionId: string }>();
 
     // Data fetching
+    const [pendingProcesses, setPendingProcesses] = useState<number>(0);
     const [isGeneratingNotes, setIsGeneratingNotes] = useState<boolean>(false);
     const [loadingError, setLoadingError] = useState<Error | null>(null);
-    const [hasMounted, setHasMounted] = useState<boolean>(false);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [isSorting, setIsSorting] = useState<boolean>(false);
+    const [resourceLoadingMap, setResourceLoadingMap] = useState<SessionDetailsLoadingMap>({
+        learningSession: false,
+        articles: false,
+        notes: false,
+    }); 
 
     // Create modal
     const [newArticle, setNewArticle] = useState<ArticleInput>({ title: '', url: '', authors: '' });
@@ -59,30 +72,65 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     const [articles, setArticles] = useState<Article[]>([]);
 
     useEffect(() => { 
-        if (params.sessionId && !hasMounted) {
-            setIsLoading(true);
-            fetchLearningSession(parseInt(params.sessionId)).then((response) => {
-                console.log(response);
+        if (params.sessionId) {
+            setResourceLoadingMap((prevMap) => ({ ...prevMap, learningSession: true }));
+            let learningSession: LearningSession | null = null;
+            fetchLearningSession(parseInt(params.sessionId as string)).then((response) => {
                 if (!response.id) {
                     throw new Error('Session ID not found.');
                 }
 
-                setSession(response);
-                fetchArticles(response.id).then(() => {
-                    console.log('Articles fetched.');
-                }).catch((error) => {
-                    console.log(error);
-                }).finally(() => {
-                    setIsLoading(false);
-                    setHasMounted(true);
+                learningSession = response;
+            }).catch((error) => {
+                console.log(error);
+                setLoadingError(error);
+            }).finally(() => {
+                setResourceLoadingMap((prevMap) => ({ ...prevMap, learningSession: false }));
+                if (learningSession) { setSession(learningSession); }
+            });
+        }
+    }, [params.sessionId]);
+
+    useEffect(() => {
+        if (session && session.id) {
+            setResourceLoadingMap((prevMap) => ({ ...prevMap, articles: true }));
+            let loadedArticles: Article[] = [];
+            fetchArticlesForSession(session.id).then((articles: Article[]) => {
+                loadedArticles = articles;
+            }).catch((error) => {
+                console.log(error);
+                setLoadingError(error);
+            }).finally(() => {
+                setResourceLoadingMap((prevMap) => ({ ...prevMap, articles: false }));
+                if (loadedArticles.length > 0) { setArticles(loadedArticles); }
+            });
+        }
+    }, [session]);
+
+    useEffect(() => { 
+        if (session && session.id && articles.length > 0) {
+            setResourceLoadingMap((prevMap) => ({ ...prevMap, notes: true }));
+            let notesByArticle: { [key: string]: string } = {};
+            fetchNotesForSession(session.id).then((notes: Note[]) => {
+                notes.forEach((note) => {
+                    if (note.articleId) {
+                        const article: Article | undefined = articles.find((article) => article.id === note.articleId);
+                        if (article) {
+                            notesByArticle[article.title] = note.note;
+                        } else {
+                            console.log('Article not found for note:', note);
+                        }
+                    }
                 });
             }).catch((error) => {
                 console.log(error);
-                setIsLoading(false);
                 setLoadingError(error);
+            }).finally(() => { 
+                setResourceLoadingMap((prevMap) => ({ ...prevMap, notes: false }));
+                if (Object.keys(notesByArticle).length > 0) { setArticleNotes(notesByArticle); }
             });
         }
-    }, [params.sessionId, hasMounted]);
+    }, [session, articles]);
 
     const fetchArticles = async (sessionId?: number) => {
         if ((!sessionId && session && session.id) || (sessionId)) {
@@ -194,19 +242,19 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                 </Grid>
             </Grid>
             <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                {isLoading && (
+                {resourceLoadingMap.learningSession && (
                     <Grid item xs={12}>
                         <CircularProgress size="48px" color="primary" />
                     </Grid>
                 )}
 
-                {!isLoading && loadingError && (
+                {!resourceLoadingMap.learningSession && loadingError && (
                     <Grid item xs={12}>
                         <Typography variant="body1" style={{ color: 'red' }}>Unable to load session: {loadingError.message}</Typography>
                     </Grid>
                 )}
 
-                {!isLoading && session && (
+                {!resourceLoadingMap.learningSession && session && (
                     <Grid item xs={12}>
                         <Typography variant="h6"><strong>Name:</strong> {session.title}</Typography>
                         <Typography variant="body1"><strong>Summary:</strong> {session.summary || 'N/A'}</Typography>
@@ -218,13 +266,13 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                 <Grid item xs={12} style={{ backgroundColor: '#f8f8f8', marginTop: '32px', borderRadius: '12px', boxShadow: '0px 2px 4px -2px rgba(0, 0, 0, 0.25)' }}>
                     <Typography variant="h5" component="h2">Articles</Typography>
 
-                    {isLoading && (
+                    {resourceLoadingMap.articles && (
                         <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
                             <Typography variant="body1">Loading articles...</Typography>
                         </Grid>
                     )}
                     
-                    {!isLoading && articles.length > 0 && articles.map((article, index) => (
+                    {!resourceLoadingMap.articles && articles.length > 0 && articles.map((article, index) => (
                         <Grid item xs={12} key={index} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '8px' }}>
                             <Typography variant="body1"><a href={article.url}><strong>{index + 1}.</strong> {article.title}</a></Typography>
                             <Button variant="outlined" color="primary" size="small" onClick={() => {
@@ -239,7 +287,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                         </Grid>
                     ))}
 
-                    {!isLoading && articles.length === 0 && (
+                    {!resourceLoadingMap.articles && articles.length === 0 && (
                         <Typography variant="body1" style={{ margin: '24px 0px', textAlign: 'center' }}>No articles have been added to this session. Use the "+ Add Article" button to start.</Typography>
                     )}
                 </Grid>
@@ -286,30 +334,29 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                 </Grid>
             )}
 
-            {isGeneratingNotes && (
-                <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                    <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
-                        <CircularProgress size="24px" color="primary" />
-                    </Grid>
-                </Grid>
-            )}
-
-            {!isGeneratingNotes && Object.keys(articleNotes).length > 0 && (
-                <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                    <Grid item xs={12} style={{ backgroundColor: '#f8f8f8', marginTop: '32px', borderRadius: '12px', boxShadow: '0px 2px 4px -2px rgba(0, 0, 0, 0.25)' }}>
-                        <Typography variant="h5" component="h2">Article Notes</Typography>
-
-                        {Object.keys(articleNotes).map((articleTitle, index) => (
+            <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
+                <Grid item xs={12} style={{ backgroundColor: '#f8f8f8', marginTop: '32px', borderRadius: '12px', boxShadow: '0px 2px 4px -2px rgba(0, 0, 0, 0.25)' }}>
+                    <Typography variant="h5" component="h2">Article Notes</Typography>
+                    {!resourceLoadingMap.notes && Object.keys(articleNotes).length > 0 && (
+                        Object.keys(articleNotes).map((articleTitle, index) => (
                             <Grid item xs={12} key={index}>
                                 <div>
                                     <h3>{articleTitle}</h3>
                                     <ReactMarkdown>{articleNotes[articleTitle]}</ReactMarkdown>
                                 </div>
                             </Grid>
-                        ))}
-                    </Grid>
+                        ))
+                    )}
+                    
+                    {resourceLoadingMap.notes && (
+                        <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
+                            <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
+                                <CircularProgress size="24px" color="primary" />
+                            </Grid>
+                        </Grid>
+                    )}
                 </Grid>
-            )}
+            </Grid>
 
             <Modal open={isModalOpen} onClose={handleModalClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', backgroundColor: 'white', padding: '20px', borderRadius: '5px', boxShadow: '0px 0px 10px rgba(0, 0, 0, 0.5)' }}>

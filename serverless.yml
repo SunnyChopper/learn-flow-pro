@@ -189,6 +189,32 @@ functions:
           trigger: PreSignUp
 
   # --- Learning Sessions --- #
+  getRecommendations:
+    handler: src/handlers/Recommendations.getRecommendationsHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/recommendations
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  generateTopicRecommendations:
+    handler: src/handlers/Recommendations.generateTopicRecommendationsHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/recommendations/topics
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
   getLearningSession:
     handler: src/handlers/Sessions.getSessionHandler
     layers:
@@ -253,6 +279,32 @@ functions:
             claims:
               - email
               - sub
+  getNotesForArticle:
+    handler: src/handlers/Articles.getNotesForArticleHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/articles/{articleId}/notes
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  getNotesForLearningSession:
+    handler: src/handlers/Sessions.getNotesForLearningSessionHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/sessions/{sessionId}/notes
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
   createArticleForLearningSession:
     handler: src/handlers/Articles.createArticleHandler
     layers:

@@ -3,10 +3,12 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 
 // Entity
 import { Article } from 'src/entity/Article';
+import { Note } from 'src/entity/Note';
 
 // Services
 import LearningSessionService from '/opt/services/LearningSessionService';
 import ArticleService from '/opt/services/ArticleService';
+import NotesService from '/opt/services/NotesService';
 
 // Utils
 import { buildResponse, getUserId } from 'src/utils/lambdas';
@@ -41,6 +43,17 @@ export const generateNotesHandler = async (event: APIGatewayProxyEvent): Promise
     const articleService: ArticleService = new ArticleService("openai", "gpt-3.5-turbo-16k", "precise");
     const notes: string = await articleService.generateNotesForArticleMarkdown(userId, articleId);
     return buildResponse(event, 200, { notes: notes });
+}
+
+export const getNotesForArticleHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+    const articleId = event.pathParameters?.articleId ? parseInt(event.pathParameters.articleId) : null;
+    if (!articleId) {
+        return buildResponse(event, 400, { message: 'Invalid article id.' });
+    }
+
+    const notesService: NotesService = new NotesService();
+    const notes: Note[] = await notesService.getNotesForArticle(articleId);
+    return buildResponse(event, 200, notes);
 }
 
 export const getArticlesHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
