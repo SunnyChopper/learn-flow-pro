@@ -4,6 +4,7 @@ import { DataSource } from "typeorm";
 // Entities
 import { KnowledgeBaseEntry } from "./entity/KnowledgeBaseEntry";
 import { LearningSession } from "./entity/LearningSession";
+import { Recommendation } from "./entity/Recommendation";
 import { KnowledgeBase } from "./entity/KnowledgeBase";
 import { ArticleCache } from "./entity/ArticleCache";
 import { SessionTag } from "./entity/SessionTag";
@@ -36,6 +37,7 @@ export const AppDataSource = new DataSource({
     entities: [
         KnowledgeBaseEntry,
         LearningSession,
+        Recommendation,
         KnowledgeBase,
         ArticleCache,
         SessionTag,

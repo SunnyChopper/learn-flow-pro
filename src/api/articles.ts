@@ -3,6 +3,7 @@ import { Auth } from 'aws-amplify';
 
 // Entities
 import { Article } from 'src/entity/Article';
+import { Note } from 'src/entity/Note';
 
 // Contracts
 import { SortedArticles } from 'src/contracts/SortArticles';
@@ -128,4 +129,44 @@ export const fetchArticlesForUser = async (): Promise<Article[]> => {
     }
 
     return await response.json() as Article[];
+}
+
+export const fetchNotesForArticle = async (articleId: number): Promise<Note[]> => {
+    if (process.env.REACT_APP_API_BASE_URL === undefined || process.env.REACT_APP_API_BASE_URL === null) {
+        throw new Error('API base URL is not defined.');
+    }
+
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/articles/${articleId}/notes`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await Auth.currentSession()).getIdToken().getJwtToken()}`
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to get notes for article. Error: ${response.status}`);
+    }
+
+    return await response.json() as Note[];
+}
+
+export const fetchNotesForSession = async (sessionId: number): Promise<Note[]> => {
+    if (process.env.REACT_APP_API_BASE_URL === undefined || process.env.REACT_APP_API_BASE_URL === null) {
+        throw new Error('API base URL is not defined.');
+    }
+
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/sessions/${sessionId}/notes`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await Auth.currentSession()).getIdToken().getJwtToken()}`
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to get notes for article. Error: ${response.status}`);
+    }
+
+    return await response.json() as Note[];
 }
