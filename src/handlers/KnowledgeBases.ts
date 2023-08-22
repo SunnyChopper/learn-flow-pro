@@ -11,7 +11,7 @@ import KnowledgeBaseService from '/opt/services/KnowledgeBaseService';
 // Utils
 import { buildResponse, getUserId } from 'src/utils/lambdas';
 
-export const getKnowledgeBasesHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+export const getUserKnowledgeBasesHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
     const userId = getUserId(event);
     if (!userId) {
         return buildResponse(event, 400, { message: 'Invalid user id.' });
@@ -28,7 +28,7 @@ export const getKnowledgeBaseHandler = async (event: APIGatewayProxyEvent): Prom
         return buildResponse(event, 400, { message: 'Invalid user id.' });
     }
 
-    let knowledgeBaseId: number | null = event.pathParameters?.knowledgeBaseId ? parseInt(event.pathParameters.knowledgeBaseId) : null;
+    let knowledgeBaseId: number | null = event.queryStringParameters?.knowledgeBaseId ? parseInt(event.queryStringParameters.knowledgeBaseId) : null;
     if (!knowledgeBaseId) {
         return buildResponse(event, 400, { message: 'Invalid knowledge base id.' });
     }
@@ -44,7 +44,7 @@ export const getArticlesForKnowledgeBaseHandler = async (event: APIGatewayProxyE
         return buildResponse(event, 400, { message: 'Invalid user id.' });
     }
 
-    let knowledgeBaseId: number | null = event.pathParameters?.knowledgeBaseId ? parseInt(event.pathParameters.knowledgeBaseId) : null;
+    let knowledgeBaseId: number | null = event.queryStringParameters?.knowledgeBaseId ? parseInt(event.queryStringParameters.knowledgeBaseId) : null;
     if (!knowledgeBaseId) {
         return buildResponse(event, 400, { message: 'Invalid knowledge base id.' });
     }

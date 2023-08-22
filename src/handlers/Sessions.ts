@@ -22,7 +22,7 @@ export const getSessionHandler = async (event: APIGatewayProxyEvent): Promise<AP
 
     let sessionId: number;
     try {
-        sessionId = parseInt(event.pathParameters?.id || '');
+        sessionId = parseInt(event.queryStringParameters?.sessionId as string);
         if (!sessionId) {
             return buildResponse(event, 400, { message: 'Invalid session id.' });
         }
@@ -35,7 +35,7 @@ export const getSessionHandler = async (event: APIGatewayProxyEvent): Promise<AP
     return buildResponse(event, 200, session);
 }
 
-export const getSessionsHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+export const getUserSessionsHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
     const userId = getUserId(event);
     if (!userId) {
         return buildResponse(event, 400, { message: 'Invalid user id.' });
@@ -47,13 +47,13 @@ export const getSessionsHandler = async (event: APIGatewayProxyEvent): Promise<A
 }
 
 export const getNotesForLearningSessionHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-    const sessionId = event.pathParameters?.sessionId ? parseInt(event.pathParameters.sessionId) : null;
+    const sessionId: string | undefined = event.queryStringParameters?.sessionId;
     if (!sessionId) {
         return buildResponse(event, 400, { message: 'Invalid session id.' });
     }
 
     const articlesService: ArticleService = new ArticleService("openai", "gpt-3.5-turbo-16k", "precise");
-    const articles: Article[] = await articlesService.getArticlesForSession(sessionId);
+    const articles: Article[] = await articlesService.getArticlesForSession(parseInt(sessionId));
     if (articles.length === 0) {
         return buildResponse(event, 200, []);
     }

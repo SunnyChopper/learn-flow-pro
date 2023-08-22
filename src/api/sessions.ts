@@ -45,7 +45,7 @@ export const fetchLearningSessions = async (): Promise<LearningSession[]> => {
         'Authorization': `Bearer ${(await Auth.currentSession()).getIdToken().getJwtToken()}`
     };
 
-    const apiPath = `${process.env.REACT_APP_API_BASE_URL}/sessions`;
+    const apiPath = `${process.env.REACT_APP_API_BASE_URL}/user/sessions`;
     const response = await fetch(apiPath, {
         method: 'GET',
         headers: headers
@@ -68,7 +68,7 @@ export const fetchLearningSession = async (sessionId: number): Promise<LearningS
         'Authorization': `Bearer ${(await Auth.currentSession()).getIdToken().getJwtToken()}`
     };
 
-    const apiPath = `${process.env.REACT_APP_API_BASE_URL}/sessions/${sessionId}`;
+    const apiPath = `${process.env.REACT_APP_API_BASE_URL}/sessions?sessionId=${sessionId}`;
     const response = await fetch(apiPath, {
         method: 'GET',
         headers: headers

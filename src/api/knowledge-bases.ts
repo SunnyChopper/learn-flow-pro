@@ -64,7 +64,7 @@ export const fetchKnowledgeBasesForUser = async (): Promise<KnowledgeBase[]> => 
         throw new Error('API base URL is not defined.');
     }
 
-    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/knowledge-bases`, {
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/user/knowledge-bases`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -84,7 +84,7 @@ export const fetchKnowledgeBaseForUser = async (knowledgeBaseId: number): Promis
         throw new Error('API base URL is not defined.');
     }
 
-    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/knowledge-bases/${knowledgeBaseId}`, {
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/knowledge-bases?knowledgeBaseId=${knowledgeBaseId}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -104,7 +104,7 @@ export const fetchArticlesForKnowledgeBase = async (knowledgeBaseId: number): Pr
         throw new Error('API base URL is not defined.');
     }
 
-    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/knowledge-bases/${knowledgeBaseId}/articles`, {
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/knowledge-bases/articles?knowledgeBaseId=${knowledgeBaseId}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',

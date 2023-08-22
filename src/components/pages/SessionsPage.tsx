@@ -56,7 +56,6 @@ const SessionsPage = () => {
     };
 
     const navigateToSession = (sessionId?: number) => {
-        console.log(`Navigate to /sessions/${sessionId}`);
         navigate(`/sessions/${sessionId}`);
     }
 

@@ -61,11 +61,8 @@ package:
   excludeDevDependencies: true
   include:
     - src/**
-    - src/nodejs/node_modules/services/**
-  exclude:
-    - node_modules/**
-    - .gitignore
-    - .git/**
+    - src/nodejs/node_modules/services/*
+    - src/nodejs/node_modules/services/**/*
 
 resources:
   Resources:
@@ -221,7 +218,7 @@ functions:
       - !Ref SharedLambdaLayer
     events:
       - http:
-          path: /api/sessions/{id}
+          path: /api/sessions
           method: get
           cors: true
           authorizer:
@@ -231,13 +228,13 @@ functions:
             claims:
               - email
               - sub
-  getLearningSessions:
-    handler: src/handlers/Sessions.getSessionsHandler
+  getUserLearningSessions:
+    handler: src/handlers/Sessions.getUserSessionsHandler
     layers:
       - !Ref SharedLambdaLayer
     events:
       - http:
-          path: /api/sessions
+          path: /api/user/sessions
           method: get
           cors: true
           authorizer:
@@ -285,7 +282,7 @@ functions:
       - !Ref SharedLambdaLayer
     events:
       - http:
-          path: /api/articles/{articleId}/notes
+          path: /api/articles/notes
           method: get
           cors: true
           authorizer:
@@ -298,7 +295,7 @@ functions:
       - !Ref SharedLambdaLayer
     events:
       - http:
-          path: /api/sessions/{sessionId}/notes
+          path: /api/sessions/notes
           method: get
           cors: true
           authorizer:
@@ -382,13 +379,13 @@ functions:
             claims:
               - email
               - sub
-  getKnowledgeBases:
-    handler: src/handlers/KnowledgeBases.getKnowledgeBasesHandler
+  getUserKnowledgeBases:
+    handler: src/handlers/KnowledgeBases.getUserKnowledgeBasesHandler
     layers:
       - !Ref SharedLambdaLayer
     events:
       - http:
-          path: /api/knowledge-bases
+          path: /api/user/knowledge-bases
           method: get
           cors: true
           authorizer:
@@ -401,7 +398,7 @@ functions:
       - !Ref SharedLambdaLayer
     events:
       - http:
-          path: /api/knowledge-bases/{knowledgeBaseId}
+          path: /api/knowledge-bases
           method: get
           cors: true
           authorizer:
@@ -414,7 +411,7 @@ functions:
       - !Ref SharedLambdaLayer
     events:
       - http:
-          path: /api/knowledge-bases/{knowledgeBaseId}/articles
+          path: /api/knowledge-bases/articles
           method: get
           cors: true
           authorizer:

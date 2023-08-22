@@ -46,7 +46,7 @@ export const generateNotesHandler = async (event: APIGatewayProxyEvent): Promise
 }
 
 export const getNotesForArticleHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-    const articleId = event.pathParameters?.articleId ? parseInt(event.pathParameters.articleId) : null;
+    const articleId = event.queryStringParameters?.articleId ? parseInt(event.queryStringParameters.articleId) : null;
     if (!articleId) {
         return buildResponse(event, 400, { message: 'Invalid article id.' });
     }

@@ -136,7 +136,7 @@ export const fetchNotesForArticle = async (articleId: number): Promise<Note[]> =
         throw new Error('API base URL is not defined.');
     }
 
-    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/articles/${articleId}/notes`, {
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/articles/notes?articleId=${articleId}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -156,7 +156,7 @@ export const fetchNotesForSession = async (sessionId: number): Promise<Note[]> =
         throw new Error('API base URL is not defined.');
     }
 
-    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/sessions/${sessionId}/notes`, {
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/sessions/notes?sessionId=${sessionId}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
