@@ -46,3 +46,44 @@ export const fetchGoalsForUser = async (): Promise<Goal[]> => {
 
     return await response.json() as Goal[];
 }
+
+export const updateGoalForUser = async (goal: Goal) => {
+    if (process.env.REACT_APP_API_BASE_URL === undefined || process.env.REACT_APP_API_BASE_URL === null) {
+        throw new Error('API base URL is not defined.');
+    }
+
+    goal.userId = await getCurrentUserId();
+
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/goals`, {
+        method: 'PUT',
+        body: JSON.stringify(goal),
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await getCurrentUserJwtToken()}`
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to create goal. Error: ${response.status}`);
+    }
+
+    return await response.json() as Goal;
+}
+
+export const deleteGoal = async (goal: Goal): Promise<void> => {
+    if (process.env.REACT_APP_API_BASE_URL === undefined || process.env.REACT_APP_API_BASE_URL === null) {
+        throw new Error('API base URL is not defined.');
+    }
+
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/goals?goalId=${goal.id}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await getCurrentUserJwtToken()}`
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to delete goal. Error: ${response.status}`);
+    }
+}

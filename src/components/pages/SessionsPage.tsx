@@ -1,9 +1,14 @@
 // System
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
+import moment from 'moment';
 
 // Material UI
-import { Button, Grid, Modal, Typography, CircularProgress } from '@mui/material';
+import {
+    Button, Grid, Modal, Typography, CircularProgress,
+    Accordion, AccordionSummary, AccordionDetails
+} from '@mui/material';
+import { ExpandMore } from '@mui/icons-material';
 
 // Database
 import { LearningSession } from 'src/entity/LearningSession';
@@ -49,6 +54,7 @@ const SessionsPage = () => {
             setSessions([...sessions, session]);
             setIsCreating(false);
             setIsModalOpen(false);
+            navigateToSession(session.id);
         } catch (error: any) {
             setCreateError(error);
             setIsCreating(false);
@@ -58,6 +64,20 @@ const SessionsPage = () => {
     const navigateToSession = (sessionId?: number) => {
         navigate(`/sessions/${sessionId}`);
     }
+
+    const groupSessionsByMonth = (sessions: LearningSession[]) => {
+        const groups: { [key: string]: LearningSession[] } = {};
+        sessions.forEach((session: LearningSession) => {
+            const month = new Date(session.createdAt || '').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            if (!groups[month]) {
+                groups[month] = [];
+            }
+            groups[month].push(session);
+        });
+        return groups;
+    };
+
+    const groupedSessions = groupSessionsByMonth(sessions);
 
     return (
         <>
@@ -79,19 +99,37 @@ const SessionsPage = () => {
 
                 {!isLoading && sessions.length === 0 && (
                     <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center' }}>
-                        <Typography variant="body1" component="p">No sessions found.</Typography>
+                        <Typography variant="body1" component="p">No sessions found. Click the "+ Create Session" button to get started on your first learning session.</Typography>
                     </Grid>
                 )}
 
-                {!isLoading && sessions.length > 0 && sessions.map((session: LearningSession) => { 
+                {!isLoading && sessions.length > 0 && Object.keys(groupedSessions).map((month, index) => {
+                    const monthSessions = groupedSessions[month];
                     return (
-                        <Grid item onClick={() => { navigateToSession(session.id); }} xs={12} key={session.id} style={{ cursor: 'pointer', backgroundColor: '#fafafa', marginBottom: '16px', padding: '16px', borderRadius: '12px', boxShadow: '0px 0px 4px 0px rgba(0,0,0,0.2)' }}>
-                            <Typography variant="h5" component="h5" style={{ marginBottom: '8px' }}>{session.title}</Typography>
-                            {session.summary && (
-                                <Typography variant="body1" component="p" style={{ marginBottom: '8px' }}>{session.summary}</Typography>
-                            )}
-                            <Typography variant="body1" component="p" style={{ marginBottom: '0px' }}>Created: {new Date(session.createdAt || '').toDateString()}</Typography>
-                        </Grid>
+                        <Grid item xs={12} key={month} style={{ marginBottom: '16px' }}>
+                            <Accordion TransitionProps={{ unmountOnExit: true, mountOnEnter: true }} defaultExpanded={index === 0}>
+                                <AccordionSummary expandIcon={<ExpandMore />}>
+                                    <Typography variant="h5" component="h5">{month}</Typography>
+                                </AccordionSummary>
+                                <AccordionDetails>
+                                    <Grid container spacing={2}>
+                                        {monthSessions.map((session: LearningSession) => { 
+                                            return (
+                                                <Grid item xs={12} key={session.id} style={{ cursor: 'pointer' }} onClick={() => { navigateToSession(session.id); }}>
+                                                    <div style={{ backgroundColor: '#fafafa', marginBottom: '16px', padding: '16px', borderRadius: '12px', boxShadow: '0px 0px 4px 0px rgba(0,0,0,0.2)' }}>
+                                                        <Typography variant="h5" component="h5" style={{ marginBottom: '8px' }}>{session.title}</Typography>
+                                                        {session.summary && (
+                                                            <Typography variant="body1" component="p" style={{ marginBottom: '8px' }}>{session.summary}</Typography>
+                                                        )}
+                                                        <Typography variant="body1" component="p" style={{ marginBottom: '0px' }}>Created: {new Date(session.createdAt || '').toDateString()}</Typography>
+                                                    </div>
+                                                </Grid>
+                                            )
+                                        })}
+                                    </Grid>
+                                </AccordionDetails>
+                            </Accordion>
+                        </Grid> 
                     )
                 })}
             </Grid>
@@ -101,11 +139,14 @@ const SessionsPage = () => {
                     <Typography variant="h5" component="h5" style={{ marginBottom: '0px' }}>
                         Create new session?
                     </Typography>
-                    <Typography variant="body1" component="p" style={{ marginBottom: '16px' }}>This will create a new learning session for {new Date().toLocaleDateString()}</Typography>
+                    <Typography variant="body1" component="p" style={{ marginBottom: '16px' }}>This will create a new learning session for {moment().format('MMM Do, YYYY')}.</Typography>
                     {isCreating && (
                         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
                             <CircularProgress />
                         </div>
+                    )}
+                    {createError && (
+                        <Typography variant="body1" component="p" style={{ marginBottom: '16px', color: '#f44336' }}>{createError}</Typography>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <Button variant="outlined" onClick={handleModalClose} style={{ marginRight: '8px', color: '#1a1a1a', borderColor: '#1a1a1a' }}>

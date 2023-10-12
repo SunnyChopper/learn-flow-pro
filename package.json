@@ -36,7 +36,7 @@
   },
   "scripts": {
     "syncdb": "ts-node ./src/orm/index.ts",
-    "debug": "node --inspect node_modules/serverless/bin/serverless offline --reloadHandler --noTimeout",
+    "debug": "node --inspect node_modules/serverless/bin/serverless offline --reloadHandler",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",

@@ -30,6 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 
 #amplify-do-not-edit-begin
+amplify/*
+amplify/**/*
 amplify/\#current-cloud-backend
 amplify/.config/local-*
 amplify/logs
@@ -50,3 +52,9 @@ amplifytools.xcconfig
 .secret-*
 **.sample
 #amplify-do-not-edit-end
+amplify/team-provider-info.json
+amplify/backend/types/amplify-dependent-resources-ref.d.ts
+amplify/backend/backend-config.json
+amplify/backend/backend-config.json
+amplify/backend/types/amplify-dependent-resources-ref.d.ts
+amplify/team-provider-info.json

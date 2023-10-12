@@ -1,15 +1,22 @@
 // System
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Auth } from 'aws-amplify';
 import moment from 'moment';
 
 // Material UI
-import { Grid, Button, Modal, TextField, Typography, CircularProgress, Divider } from '@mui/material';
+import {
+    Grid, Button, Modal, TextField,
+    Typography, CircularProgress, Divider,
+    Accordion, AccordionSummary, AccordionDetails, Box, AlertColor
+} from '@mui/material';
+import { ExpandMore } from '@mui/icons-material';
 
 // Components
 import Header from 'src/components/organisms/Header';
+import Toast from 'src/components/atoms/Toast';
 
 // API
 import {
@@ -18,6 +25,7 @@ import {
     fetchNotesForSession,
     sortArticlesForSession,
     generateNotesForArticle,
+    generateSummaryForArticle
 } from 'src/api/articles';
 import { fetchLearningSession } from 'src/api/sessions';
 
@@ -40,6 +48,7 @@ interface SessionDetailsLoadingMap {
     learningSession: boolean;
     articles: boolean;
     notes: boolean;
+    addArticle: boolean;
 }
 
 interface SessionDetailsPageProps {
@@ -48,17 +57,29 @@ interface SessionDetailsPageProps {
 
 const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     const params = useParams<{ sessionId: string }>();
+    const navigate = useNavigate();
+
+    // UI
+    const [toastMessage, setToastMessage] = useState<string>('');
+    const [toastSeverity, setToastSeverity] = useState<AlertColor>('success');
+    const [accordionExpanded, setAccordionExpanded] = useState<{ [key: string]: boolean }>({
+        userArticles: true,
+        sortedArticles: false,
+        userNotes: false
+    });
 
     // Data fetching
-    const [pendingProcesses, setPendingProcesses] = useState<number>(0);
+    const [addArticleSuccessMessage, setAddArticleSuccessMessage] = useState<string>('');
     const [isGeneratingNotes, setIsGeneratingNotes] = useState<boolean>(false);
     const [loadingError, setLoadingError] = useState<Error | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [isSorting, setIsSorting] = useState<boolean>(false);
+    const [sortingAction, setSortingAction] = useState<string | null>(null);
     const [resourceLoadingMap, setResourceLoadingMap] = useState<SessionDetailsLoadingMap>({
         learningSession: false,
         articles: false,
         notes: false,
+        addArticle: false
     }); 
 
     // Create modal
@@ -163,6 +184,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     };
 
     const handleNewArticleSubmit = async () => {
+        setResourceLoadingMap((prevMap) => ({ ...prevMap, addArticle: true }));
         console.log('Submitting new article:', newArticle);
         if (!session || !session.id) {
             throw new Error('Session ID not found. Cannot submit article.');
@@ -178,20 +200,25 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
         const articleToCreate: Article = new Article();
         articleToCreate.userId = userId;
         articleToCreate.sessionId = session.id;
-        articleToCreate.title = newArticle.title;
         articleToCreate.url = newArticle.url;
-        articleToCreate.authors = newArticle.authors;
+        // NOTE: These two will be set on the backend.
+        articleToCreate.title = '';
+        articleToCreate.authors = '';
 
         createArticleForSession(articleToCreate).then((response) => {
             console.log(response);
-            fetchArticles();
+            setArticles((prevArticles) => ([...prevArticles, response]));
+            setNewArticle({ title: '', url: '', authors: '' });
+            setAddArticleSuccessMessage(`Successfully added ${response.title}`);
+            setTimeout(() => {
+                setAddArticleSuccessMessage('');
+            }, 3000);
         }).catch((error) => {
             console.log(error);
             throw new Error('Unable to create article. Please try again.');
+        }).finally(() => {
+            setResourceLoadingMap((prevMap) => ({ ...prevMap, addArticle: false }));
         });
-
-        setNewArticle({ title: '', url: '', authors: '' });
-        setIsModalOpen(false);
     };
 
     const handleSortArticles = async () => {
@@ -200,15 +227,58 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
         }
 
         setIsSorting(true);
-        sortArticlesForSession(session.id).then((response: SortedArticles) => {
-            console.log(response);
-            setSortedArticles(response);
-            fetchArticles();
+        setSortingAction('Generating/retrieving summaries for articles...');
+        setToastMessage('Generating/retrieving summaries for articles...');
+        setToastSeverity('info');
+
+        // Generate summaries for each article.
+        await Promise.all(articles.map((article) => {
+            if (!article.id) {
+                throw new Error('No article ID found.');
+            }
+
+            return generateSummaryForArticle(article.id).then((response) => {
+                // NOTE: Updating the state variable will trigger a re-render and
+                // show the summary for the article.
+                setArticles(prevArticles => prevArticles.map((prevArticle) => {
+                    if (prevArticle.id === article.id) {
+                        prevArticle.summary = response.summary;
+                    }
+    
+                    return prevArticle;
+                }));
+            });
+        })).then(() => {
+
+            setSortingAction('Sorting articles...');
+            setToastMessage('Sorting articles...');
+            setToastSeverity('info');
+            setAccordionExpanded({
+                userArticles: false,
+                sortedArticles: true,
+                userNotes: false
+            });
+        }).then(() => {
+
+            sortArticlesForSession(session.id || 0).then((response: SortedArticles) => {
+                console.log(response);
+                setSortedArticles(response);
+                setToastMessage('Successfully sorted articles!');
+                setToastSeverity('success');
+            }).catch((error) => {
+                console.log(error);
+                setToastMessage('Unable to sort articles. Please try again.');
+                setToastSeverity('error');
+                throw new Error('Unable to sort articles. Please try again.');
+            }).finally(() => {
+                setIsSorting(false);
+                setSortingAction(null);
+            });
         }).catch((error) => {
             console.log(error);
+            setToastMessage('Unable to sort articles. Please try again.');
+            setToastSeverity('error');
             throw new Error('Unable to sort articles. Please try again.');
-        }).finally(() => {
-            setIsSorting(false);
         });
     };
 
@@ -231,173 +301,246 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
 
     return (
         <>
+            {toastMessage && (
+                <Toast toastKey={toastMessage} message={toastMessage} severity={toastSeverity} />
+            )}
             <Header />
-            <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                <Grid item xs={12} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', marginTop: '48px' }}>
-                    <Typography variant="h4" component="h1">Session Details</Typography>
-                    <Button variant="outlined" color="primary" onClick={handleModalOpen}>+ Add Article</Button>
+            <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', marginTop: '0px' }}>
+                <Grid item xs={12} sx={{ marginBottom: '0px' }}>
+                    
+                </Grid>
+                <Grid item xs={12} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start' }}>
+                        <Typography variant="h4" component="h1">{!resourceLoadingMap.learningSession && session ? session.title : 'Loading...'}</Typography>
+                        <Button variant="text" color="primary" onClick={() => navigate(-1)} sx={{ fontSize: '12px' }}>&lt; Back to All Sessions</Button>
+                    </Box>
+                    <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', maxHeight: '32px' }}>
+                        <Button variant="outlined" disabled={isLoading || isSorting || (articles.length === 0)} size="small" color="primary" sx={{ marginRight: '8px' }} onClick={handleSortArticles}>Sort Articles</Button>
+                        <Button variant="outlined" size="small" color="secondary" onClick={handleModalOpen} disabled={isLoading || isSorting}>+ Add Article</Button>
+                    </Box>
                 </Grid>
                 <Grid item xs={12}>
                     <Divider />
                 </Grid>
             </Grid>
             <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                {resourceLoadingMap.learningSession && (
-                    <Grid item xs={12}>
-                        <CircularProgress size="48px" color="primary" />
-                    </Grid>
-                )}
-
                 {!resourceLoadingMap.learningSession && loadingError && (
                     <Grid item xs={12}>
                         <Typography variant="body1" style={{ color: 'red' }}>Unable to load session: {loadingError.message}</Typography>
                     </Grid>
                 )}
 
-                {!resourceLoadingMap.learningSession && session && (
+                {/* {!resourceLoadingMap.learningSession && session && (
                     <Grid item xs={12}>
-                        <Typography variant="h6"><strong>Name:</strong> {session.title}</Typography>
                         <Typography variant="body1"><strong>Summary:</strong> {session.summary || 'N/A'}</Typography>
-                        <Typography variant="body1"><strong>Created:</strong> {moment(session.createdAt).format('MMM Do, YYYY')}</Typography>
                     </Grid>
-                )}
+                )} */}
             </Grid>
             <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                <Grid item xs={12} style={{ backgroundColor: '#f8f8f8', marginTop: '32px', borderRadius: '12px', boxShadow: '0px 2px 4px -2px rgba(0, 0, 0, 0.25)' }}>
-                    <Typography variant="h5" component="h2">Articles</Typography>
-
-                    {resourceLoadingMap.articles && (
-                        <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
-                            <Typography variant="body1">Loading articles...</Typography>
-                        </Grid>
-                    )}
-                    
-                    {!resourceLoadingMap.articles && articles.length > 0 && articles.map((article, index) => (
-                        <Grid item xs={12} key={index} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '8px' }}>
-                            <Typography variant="body1"><a href={article.url}><strong>{index + 1}.</strong> {article.title}</a></Typography>
-                            <Button variant="outlined" color="primary" size="small" onClick={() => {
-                                if (!article.id) {
-                                    setLoadingError(new Error('No article ID found.'));
-                                } else {
-                                    handleGenerateNotes(article.id);
-                                }
-                            }}>
-                                Generate Notes
-                            </Button>
-                        </Grid>
-                    ))}
-
-                    {!resourceLoadingMap.articles && articles.length === 0 && (
-                        <Typography variant="body1" style={{ margin: '24px 0px', textAlign: 'center' }}>No articles have been added to this session. Use the "+ Add Article" button to start.</Typography>
-                    )}
-                </Grid>
-            </Grid>
-            <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
-                    <Button variant="contained" disabled={isLoading || isSorting} color="primary" onClick={handleSortArticles}>Sort Articles</Button>
-                </Grid>
-            </Grid>
-
-            {sortedArticles && (
-                <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                    <Grid item xs={12} style={{ backgroundColor: '#f8f8f8', marginTop: '32px', borderRadius: '12px', boxShadow: '0px 2px 4px -2px rgba(0, 0, 0, 0.25)' }}>
-                        <Typography variant="h5" component="h2">Sorted Articles</Typography>
-
-                        {isSorting && (
-                            <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
-                                <CircularProgress size="24px" color="primary" />
-                            </Grid>
-                        )}
-                        
-                        {!isSorting && sortedArticles?.articles.length > 0 && sortedArticles.articles.map((article, index) => {
-                            let reasons: string;
-                            if (article.reasons) {
-                                reasons = article.reasons.join(', ');
-                            } else {
-                                reasons = 'N/A';
-                            }
-
-                            return (
-                                <Grid item xs={12} key={index}>
-                                    <div>
-                                        <h3>{article.title}</h3>
-                                        <p>{reasons}</p>
-                                    </div>
+                <Grid item xs={12}>
+                    <Accordion
+                        expanded={accordionExpanded.userArticles}
+                        onChange={(event: React.SyntheticEvent, isExpanded: boolean) => {
+                            setAccordionExpanded((prevExpanded) => ({ ...prevExpanded, userArticles: isExpanded }));
+                        }}
+                        sx={{ backgroundColor: '#f8f8f8' }}
+                    >
+                        <AccordionSummary
+                            expandIcon={<ExpandMore />}
+                            aria-controls="user-articles-panel-content"
+                            id="user-articles-panel-header"
+                        >
+                            <Typography variant="h5" component="h2">Articles {!resourceLoadingMap.articles && articles.length > 0 && (`(${articles.length})`)}</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails id="user-articles-panel-content">
+                            {resourceLoadingMap.articles && (
+                                <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
+                                    <Typography variant="body1">Loading articles...</Typography>
                                 </Grid>
-                            );
-                        })}
+                            )}
 
-                        {!isSorting && sortedArticles?.articles.length === 0 && (
-                            <Typography variant="body1" style={{ margin: '24px 0px', textAlign: 'center' }}>No articles have been sorted for this session.</Typography>
-                        )}
-                    </Grid>
+                            {!resourceLoadingMap.articles && articles.length > 0 && articles.map((article, index) => (
+                                <Grid item xs={12} key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '8px' }}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start' }}>
+                                        <Typography variant="body1" gutterBottom><a href={article.url}><strong>{index + 1}.</strong> {article.title}</a></Typography>
+                                        {article.summary && (
+                                            <Typography variant="body2" style={{ color: '#888' }}><strong>Summary: </strong>{article.summary}</Typography>
+                                        )}
+                                    </Box>
+                                    <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: '12px' }}>
+                                        <Button variant="outlined" color="primary" size="small" onClick={() => {
+                                            if (!article.id) {
+                                                setLoadingError(new Error('No article ID found.'));
+                                            } else {
+                                                handleGenerateNotes(article.id);
+                                            }
+                                        }}>
+                                        Generate Notes
+                                        </Button>
+                                    </Box>
+                                </Grid>
+                            ))}
+
+                            {!resourceLoadingMap.articles && articles.length === 0 && (
+                                <Typography variant="body1" style={{ margin: '24px 0px', textAlign: 'center' }}>No articles have been added to this session. Use the "+ Add Article" button to start.</Typography>
+                            )}
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
-            )}
+            </Grid>
 
             <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                <Grid item xs={12} style={{ backgroundColor: '#f8f8f8', marginTop: '32px', borderRadius: '12px', boxShadow: '0px 2px 4px -2px rgba(0, 0, 0, 0.25)' }}>
-                    <Typography variant="h5" component="h2">Article Notes</Typography>
-                    {!resourceLoadingMap.notes && Object.keys(articleNotes).length > 0 && (
-                        Object.keys(articleNotes).map((articleTitle, index) => (
-                            <Grid item xs={12} key={index}>
-                                <div>
-                                    <h3>{articleTitle}</h3>
-                                    <ReactMarkdown>{articleNotes[articleTitle]}</ReactMarkdown>
-                                </div>
-                            </Grid>
-                        ))
-                    )}
-                    
-                    {resourceLoadingMap.notes && (
-                        <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
-                            <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
-                                <CircularProgress size="24px" color="primary" />
-                            </Grid>
-                        </Grid>
-                    )}
+                <Grid item xs={12}>
+                    <Accordion
+                        expanded={accordionExpanded.sortedArticles}
+                        onChange={(event: React.SyntheticEvent, isExpanded: boolean) => {
+                            setAccordionExpanded((prevExpanded) => ({ ...prevExpanded, sortedArticles: isExpanded }));
+                        }}
+                        sx={{ backgroundColor: '#f8f8f8' }}
+                    >
+                        <AccordionSummary
+                            expandIcon={<ExpandMore />}
+                            aria-controls="sorted-articles-panel-content"
+                            id="sorted-articles-panel-header"
+                        >
+                            <Typography variant="h5" component="h2">Sorted Articles</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails id="sorted-articles-panel-content">
+                            {isSorting && (
+                                <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
+                                    <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
+                                        <CircularProgress size="24px" color="primary" />
+                                    </Grid>
+                                </Grid>
+                            )}
+
+                            {!isSorting && sortedArticles && sortedArticles?.sortedArticles.length > 0 && sortedArticles.sortedArticles.map((article, index) => {
+                                let reasons: string;
+                                if (article.reasons) {
+                                    reasons = article.reasons.join(', ');
+                                } else {
+                                    reasons = 'N/A';
+                                }
+
+                                let informationFlow: string;
+                                if (article.informationFlow) {
+                                    informationFlow = article.informationFlow.join(', ');
+                                } else {
+                                    informationFlow = 'N/A';
+                                }
+
+                                const matchingArticle: Article | undefined = articles.find((userArticle) => userArticle.title === article.title);
+                                if (!matchingArticle) {
+                                    throw new Error('Matching article not found.');
+                                }
+
+                                return (
+                                    <Grid item xs={12} key={index}>
+                                        <div>
+                                            <h3>{index + 1}. <a href={matchingArticle.url}>{article.title}</a></h3>
+                                            <p>Reasons: {reasons}</p>
+                                            <p>Flow of Info: {informationFlow}</p>
+                                        </div>
+                                    </Grid>
+                                );
+                            })}
+
+                            {!isSorting && (!sortedArticles || sortedArticles?.sortedArticles.length === 0) && (
+                                <Typography variant="body1" style={{ margin: '24px 0px', textAlign: 'center' }}>No articles have been sorted for this session.</Typography>
+                            )}
+                        </AccordionDetails>
+                    </Accordion>
+                </Grid>
+            </Grid>
+
+            <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', marginBottom: '64px' }}>
+                <Grid item xs={12}>
+                    <Accordion
+                        expanded={accordionExpanded.userNotes}
+                        onChange={(event: React.SyntheticEvent, isExpanded: boolean) => {
+                            setAccordionExpanded((prevExpanded) => ({ ...prevExpanded, userNotes: isExpanded }));
+                        }}
+                        sx={{ backgroundColor: '#f8f8f8' }}
+                    >
+                        <AccordionSummary
+                            expandIcon={<ExpandMore />}
+                            aria-controls="user-notes-panel-content"
+                            id="user-notes-panel-header"
+                        >
+                            <Typography variant="h5" component="h2">Session Notes</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails id="user-notes-panel-content">
+                        <>
+                            {(!resourceLoadingMap.notes && Object.keys(articleNotes).length > 0) ? (
+                                Object.keys(articleNotes).map((articleTitle, index) => (
+                                    <Grid item xs={12} key={index}>
+                                        <div>
+                                            <h3>{articleTitle}</h3>
+                                            <ReactMarkdown>{articleNotes[articleTitle]}</ReactMarkdown>
+                                        </div>
+                                    </Grid>
+                                ))
+                            ) : (
+                                <Grid item xs={12} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
+                                    <Typography variant="body1" style={{ color: '#888' }}>No notes taken for any articles in the session.</Typography>
+                                </Grid>
+                            )}        
+                        </>
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
             </Grid>
 
             <Modal open={isModalOpen} onClose={handleModalClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', backgroundColor: 'white', padding: '20px', borderRadius: '5px', boxShadow: '0px 0px 10px rgba(0, 0, 0, 0.5)' }}>
-                    <Grid item xs={12}>
-                        <Typography variant="h5" component="h3" gutterBottom>Add Article</Typography>
+                <>
+                    {resourceLoadingMap.addArticle && (
+                        <div
+                            style={{
+                                position: 'fixed',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                zIndex: 9999
+                            }}
+                        >
+                            <CircularProgress color="primary" />
+                        </div>
+                    )}
+                    <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', backgroundColor: 'white', padding: '20px', borderRadius: '5px', boxShadow: '0px 0px 10px rgba(0, 0, 0, 0.5)' }}>
+                        <Grid item xs={12}>
+                            <Typography variant="h5" component="h3" gutterBottom>Add Medium Article</Typography>
+                            <Typography variant="body1" component="p" gutterBottom>By copying-and-pasting the URL below of the Medium article that you are interested in, you can import it into your learning session.</Typography>
+                        </Grid>
+
+                        <Grid item xs={12}>
+                            <TextField
+                                required
+                                fullWidth
+                                label="URL"
+                                name="url"
+                                value={newArticle.url}
+                                onChange={handleNewArticleChange}
+                            />
+                        </Grid>
+                        
+                        {addArticleSuccessMessage && (
+                            <Grid item xs={12}>
+                                <Typography variant="body1" style={{ color: 'green' }}>{addArticleSuccessMessage}</Typography>
+                            </Grid>
+                        )}
+
+                        <Grid item xs={12}>
+                            <Button variant="contained" color="primary" onClick={handleNewArticleSubmit} disabled={!newArticle.url}>
+                                Add Article
+                            </Button>
+                        </Grid>
                     </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            required
-                            fullWidth
-                            label="Title"
-                            name="title"
-                            value={newArticle.title}
-                            onChange={handleNewArticleChange}
-                        />
-                    </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            required
-                            fullWidth
-                            label="URL"
-                            name="url"
-                            value={newArticle.url}
-                            onChange={handleNewArticleChange}
-                        />
-                    </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            fullWidth
-                            label="Authors"
-                            name="authors"
-                            value={newArticle.authors}
-                            onChange={handleNewArticleChange}
-                        />
-                    </Grid>
-                    <Grid item xs={12}>
-                        <Button variant="contained" color="primary" onClick={handleNewArticleSubmit} disabled={!newArticle.title || !newArticle.url}>
-                            Add Article
-                        </Button>
-                    </Grid>
-                </Grid>
+                </>
             </Modal>
         </>
     );

@@ -34,6 +34,29 @@ export const sortArticlesForSession = async (sessionId: number): Promise<SortedA
     return await response.json() as SortedArticles;
 }
 
+export const generateSummaryForArticle = async (articleId: number): Promise<{ summary: string }> => {
+    if (process.env.REACT_APP_API_BASE_URL === undefined || process.env.REACT_APP_API_BASE_URL === null) {
+        throw new Error('API base URL is not defined.');
+    }
+
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/articles/summary`, {
+        method: 'POST',
+        body: JSON.stringify({
+            articleId: articleId
+        }),
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await getCurrentUserJwtToken()}`
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to create article. Error: ${response.status}`);
+    }
+
+    return await response.json() as { summary: string };
+}
+
 export const generateNotesForArticle = async (articleId: number): Promise<{ notes: string }> => {
     if (process.env.REACT_APP_API_BASE_URL === undefined || process.env.REACT_APP_API_BASE_URL === null) {
         throw new Error('API base URL is not defined.');

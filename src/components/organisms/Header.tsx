@@ -49,7 +49,7 @@ const Header = () => {
 
     return (
         <>
-            <AppBar position="static" style={{ backgroundColor: '#303030' }}>
+            <AppBar position="sticky" style={{ backgroundColor: '#303030' }}>
                 <Toolbar>
                     <IconButton edge="start" color="inherit" aria-label="menu" onClick={toggleDrawer}>
                         <MenuIcon />
@@ -73,10 +73,10 @@ const Header = () => {
                         <ListItemIcon><SchoolIcon /></ListItemIcon>
                         <ListItemText><Typography variant="body1">Learning Sessions</Typography></ListItemText>
                     </ListItem>
-                    <ListItem component={RouterLink} to="/knowledge-bases" onClick={handleMenuItemClick} style={headerStyles.linkItem}>
+                    {/* <ListItem component={RouterLink} to="/knowledge-bases" onClick={handleMenuItemClick} style={headerStyles.linkItem}>
                         <ListItemIcon><MenuBookIcon /></ListItemIcon>
                         <ListItemText><Typography variant="body1">Knowledge Bases</Typography></ListItemText>
-                    </ListItem>
+                    </ListItem> */}
                     <ListItem onClick={handleLogout} style={headerStyles.logoutMenuItem}>
                         <ListItemIcon>
                             <ExitToAppIcon />

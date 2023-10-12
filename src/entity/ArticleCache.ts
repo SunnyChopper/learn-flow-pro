@@ -14,6 +14,9 @@ export class ArticleCache {
     @Column('text', { nullable: true })
     public markdown: string;
 
+    @Column('text', { nullable: true })
+    public summary?: string;
+
     @CreateDateColumn()
     public createdAt?: string;
 }

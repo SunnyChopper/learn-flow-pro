@@ -5,6 +5,7 @@ provider:
   name: aws
   runtime: nodejs18.x
   region: us-east-1
+  timeout: 30
   environment:
     REACT_APP_OPENAI_API_KEY: ${env:REACT_APP_OPENAI_API_KEY}
     REACT_APP_IDENTITY_POOL_ID: ${env:REACT_APP_IDENTITY_POOL_ID}
@@ -13,16 +14,12 @@ provider:
     REACT_APP_USER_POOL_CLIENT_ID: ${env:REACT_APP_USER_POOL_CLIENT_ID}
     REACT_APP_API_BASE_URL: ${env:REACT_APP_API_BASE_URL}
     REACT_APP_MEDIUM_API_KEY: ${env:REACT_APP_MEDIUM_API_KEY}
-  #   REACT_APP_DB_HOST:
-  #     'Fn::ImportValue': REACT_APP_DB_HOST
-  #   REACT_APP_DB_PORT:
-  #     'Fn::ImportValue': REACT_APP_DB_PORT
-  #   REACT_APP_DB_NAME:
-  #     'Fn::ImportValue': REACT_APP_DB_NAME
-  #   REACT_APP_DB_USERNAME:
-  #     'Fn::ImportValue': REACT_APP_DB_USERNAME
-  #   REACT_APP_DB_PASSWORD:
-  #     'Fn::ImportValue': REACT_APP_DB_PASSWORD
+    REACT_APP_ALLOWED_ORIGINS: ${env:REACT_APP_ALLOWED_ORIGINS}
+    REACT_APP_DB_HOST: ${env:REACT_APP_DB_HOST}
+    REACT_APP_DB_PORT: ${env:REACT_APP_DB_PORT}
+    REACT_APP_DB_NAME: ${env:REACT_APP_DB_NAME}
+    REACT_APP_DB_USERNAME: ${env:REACT_APP_DB_USERNAME}
+    REACT_APP_DB_PASSWORD: ${env:REACT_APP_DB_PASSWORD}
     
 # you can add statements to the Lambda function's IAM Role here
 #  iam:
@@ -347,6 +344,19 @@ functions:
             type: COGNITO_USER_POOLS
             authorizerId:
               Ref: ApiGatewayAuthorizer
+  generateSummaryForArticle:
+    handler: src/handlers/Articles.generateSummaryHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/articles/summary
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
   getGoals:
     handler: src/handlers/Goals.getGoalsHandler
     layers:
@@ -371,6 +381,35 @@ functions:
       - http:
           path: /api/goals
           method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  updateGoal:
+    handler: src/handlers/Goals.updateGoalHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/goals
+          method: put
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  deleteGoal:
+    handler: src/handlers/Goals.deleteGoalHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/goals
+          method: delete
           cors: true
           authorizer:
             type: COGNITO_USER_POOLS
@@ -456,3 +495,9 @@ custom:
       - REACT_APP_USER_POOL_CLIENT_ID
       - REACT_APP_API_BASE_URL
       - REACT_APP_MEDIUM_API_KEY
+      - REACT_APP_ALLOWED_ORIGINS
+      - REACT_APP_DB_HOST
+      - REACT_APP_DB_PORT
+      - REACT_APP_DB_NAME
+      - REACT_APP_DB_USERNAME
+      - REACT_APP_DB_PASSWORD
