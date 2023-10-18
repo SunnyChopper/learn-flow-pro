@@ -2,6 +2,7 @@
 
 # serverless
 /.serverless
+.dynamodb
 
 # dependencies
 /node_modules

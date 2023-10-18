@@ -11,7 +11,7 @@ import { SortedArticles } from 'src/contracts/SortArticles';
 // Utils
 import { getCurrentUserId, getCurrentUserJwtToken } from 'src/utils/auth';
 
-export const sortArticlesForSession = async (sessionId: number): Promise<SortedArticles> => { 
+export const invokeSortingArticlesForSession = async (sessionId: number, articles: Article[]): Promise<boolean> => {
     if (process.env.REACT_APP_API_BASE_URL === undefined || process.env.REACT_APP_API_BASE_URL === null) {
         throw new Error('API base URL is not defined.');
     }
@@ -19,7 +19,8 @@ export const sortArticlesForSession = async (sessionId: number): Promise<SortedA
     const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/sessions/sort`, {
         method: 'POST',
         body: JSON.stringify({
-            sessionId: sessionId
+            sessionId: sessionId,
+            articles: articles
         }),
         headers: {
             'Content-Type': 'application/json',
@@ -29,6 +30,28 @@ export const sortArticlesForSession = async (sessionId: number): Promise<SortedA
 
     if (!response.ok) {
         throw new Error(`Failed to create article. Error: ${response.status}`);
+    }
+
+    const responseJSON = await response.json() as { success: boolean, message?: string };
+    return responseJSON.success;
+}
+
+export const fetchSortedArticlesForSession = async (sessionId: number): Promise<SortedArticles | null> => {
+    const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/sessions/sort?sessionId=${sessionId}`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await getCurrentUserJwtToken()}`
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to create article. Error: ${response.status}`);
+    }
+
+    if (response.status === 202) {
+        console.log('Sorting articles is still in progress.');
+        return null;
     }
 
     return await response.json() as SortedArticles;
