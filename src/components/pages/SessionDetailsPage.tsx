@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Auth } from 'aws-amplify';
-import moment from 'moment';
 
 // Material UI
 import {
@@ -23,7 +22,8 @@ import {
     createArticleForSession,
     fetchArticlesForSession,
     fetchNotesForSession,
-    sortArticlesForSession,
+    invokeSortingArticlesForSession,
+    fetchSortedArticlesForSession,
     generateNotesForArticle,
     generateSummaryForArticle
 } from 'src/api/articles';
@@ -70,7 +70,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
 
     // Data fetching
     const [addArticleSuccessMessage, setAddArticleSuccessMessage] = useState<string>('');
-    const [isGeneratingNotes, setIsGeneratingNotes] = useState<boolean>(false);
+    // const [isGeneratingNotes, setIsGeneratingNotes] = useState<boolean>(false);
     const [loadingError, setLoadingError] = useState<Error | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [isSorting, setIsSorting] = useState<boolean>(false);
@@ -87,7 +87,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Data
-    const [articleNotes, setArticleNotes] = useState<{ [key: string]: string }>({});
+    // const [articleNotes, setArticleNotes] = useState<{ [key: string]: string }>({});
     const [sortedArticles, setSortedArticles] = useState<SortedArticles | null>(null);
     const [session, setSession] = useState<LearningSession | null>(null);
     const [articles, setArticles] = useState<Article[]>([]);
@@ -95,6 +95,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     useEffect(() => { 
         if (params.sessionId) {
             setResourceLoadingMap((prevMap) => ({ ...prevMap, learningSession: true }));
+            setResourceLoadingMap((prevMap) => ({ ...prevMap, articles: true }));
             let learningSession: LearningSession | null = null;
             fetchLearningSession(parseInt(params.sessionId as string)).then((response) => {
                 if (!response.id) {
@@ -129,46 +130,59 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     }, [session]);
 
     useEffect(() => { 
-        if (session && session.id && articles.length > 0) {
-            setResourceLoadingMap((prevMap) => ({ ...prevMap, notes: true }));
-            let notesByArticle: { [key: string]: string } = {};
-            fetchNotesForSession(session.id).then((notes: Note[]) => {
-                notes.forEach((note) => {
-                    if (note.articleId) {
-                        const article: Article | undefined = articles.find((article) => article.id === note.articleId);
-                        if (article) {
-                            notesByArticle[article.title] = note.note;
-                        } else {
-                            console.log('Article not found for note:', note);
-                        }
+        if (session && session.id && articles.length > 0 && !sortedArticles) {
+            const fetchSortedArticles = async () => {
+                if (!session || !session.id) {
+                    throw new Error('Session ID not found. Cannot sort articles.');
+                }
+
+                let sortedArticlesResponse: SortedArticles | null = null;
+                setIsSorting(true);
+                setSortingAction('Generating/retrieving summaries for articles...');
+
+                try {
+                    sortedArticlesResponse = await fetchSortedArticlesForSession(session.id);
+                    if (sortedArticlesResponse?.sortedArticles) {
+                        setSortedArticles({ sortedArticles: sortedArticlesResponse.sortedArticles });
+                        setAccordionExpanded({
+                            userArticles: false,
+                            sortedArticles: true,
+                            userNotes: false
+                        });
                     }
-                });
-            }).catch((error) => {
-                console.log(error);
-                setLoadingError(error);
-            }).finally(() => { 
-                setResourceLoadingMap((prevMap) => ({ ...prevMap, notes: false }));
-                if (Object.keys(notesByArticle).length > 0) { setArticleNotes(notesByArticle); }
-            });
+                } catch (error) {
+                    console.log(error);
+                    throw error;
+                } finally {
+                    setIsSorting(false);
+                    setSortingAction(null);
+                }
+            }
+
+            fetchSortedArticles();
+
+            // setResourceLoadingMap((prevMap) => ({ ...prevMap, notes: true }));
+            // let notesByArticle: { [key: string]: string } = {};
+            // fetchNotesForSession(session.id).then((notes: Note[]) => {
+            //     notes.forEach((note) => {
+            //         if (note.articleId) {
+            //             const article: Article | undefined = articles.find((article) => article.id === note.articleId);
+            //             if (article) {
+            //                 notesByArticle[article.title] = note.note;
+            //             } else {
+            //                 console.log('Article not found for note:', note);
+            //             }
+            //         }
+            //     });
+            // }).catch((error) => {
+            //     console.log(error);
+            //     setLoadingError(error);
+            // }).finally(() => { 
+            //     setResourceLoadingMap((prevMap) => ({ ...prevMap, notes: false }));
+            //     if (Object.keys(notesByArticle).length > 0) { setArticleNotes(notesByArticle); }
+            // });
         }
     }, [session, articles]);
-
-    const fetchArticles = async (sessionId?: number) => {
-        if ((!sessionId && session && session.id) || (sessionId)) {
-            const id = sessionId || session?.id;
-            if (!id) {
-                throw new Error('Session ID not found. Cannot fetch articles.');
-            }
-
-            try {
-                const articles: Article[] = await fetchArticlesForSession(id);
-                setArticles(articles);
-            } catch (error) {
-                console.log(error);
-                throw new Error('Unable to fetch articles. Please try again.');
-            }
-        }
-    }
 
     const handleModalOpen = () => {
         setIsModalOpen(true);
@@ -231,72 +245,115 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
         setToastMessage('Generating/retrieving summaries for articles...');
         setToastSeverity('info');
 
-        // Generate summaries for each article.
-        await Promise.all(articles.map((article) => {
-            if (!article.id) {
-                throw new Error('No article ID found.');
-            }
+        // Check if all articles have summaries.
+        const articlesWithoutSummaries: number = articles.filter((article) => !article.summary).length;
+        let articlesToSort: Article[] = [];
+        if (articlesWithoutSummaries > 0) {
+            // Generate summaries for each article.
+            await Promise.allSettled(articles.map(async (article) => {
+                if (!article.id) {
+                    throw new Error('No article ID found.');
+                }
 
-            return generateSummaryForArticle(article.id).then((response) => {
+                if (article.summary) {
+                    return Promise.resolve();
+                }
+
+                const response = await generateSummaryForArticle(article.id);
+
                 // NOTE: Updating the state variable will trigger a re-render and
                 // show the summary for the article.
                 setArticles(prevArticles => prevArticles.map((prevArticle) => {
                     if (prevArticle.id === article.id) {
                         prevArticle.summary = response.summary;
                     }
-    
+
                     return prevArticle;
                 }));
-            });
-        })).then(() => {
 
-            setSortingAction('Sorting articles...');
-            setToastMessage('Sorting articles...');
-            setToastSeverity('info');
-            setAccordionExpanded({
-                userArticles: false,
-                sortedArticles: true,
-                userNotes: false
-            });
-        }).then(() => {
+                articlesToSort.push({ ...article, summary: response.summary });
 
-            sortArticlesForSession(session.id || 0).then((response: SortedArticles) => {
-                console.log(response);
-                setSortedArticles(response);
-                setToastMessage('Successfully sorted articles!');
-                setToastSeverity('success');
-            }).catch((error) => {
-                console.log(error);
-                setToastMessage('Unable to sort articles. Please try again.');
-                setToastSeverity('error');
-                throw new Error('Unable to sort articles. Please try again.');
-            }).finally(() => {
-                setIsSorting(false);
-                setSortingAction(null);
-            });
-        }).catch((error) => {
+                return Promise.resolve();
+            }));
+        } else {
+            articlesToSort = articles;
+        }
+
+        setSortingAction('Sorting articles...');
+        setToastMessage('Sorting articles...');
+        setToastSeverity('info');
+        setAccordionExpanded({
+            userArticles: false,
+            sortedArticles: true,
+            userNotes: false
+        });
+
+        try {
+            await invokeSortingArticlesForSession(session.id, articlesToSort);
+        } catch (error) {
             console.log(error);
+            setIsSorting(false);
+            setSortingAction(null);
             setToastMessage('Unable to sort articles. Please try again.');
             setToastSeverity('error');
-            throw new Error('Unable to sort articles. Please try again.');
-        });
+            throw error;
+        }
+
+        let lambdaResponse: SortedArticles | null = null;
+        const interval = setInterval(async () => {
+            if (!session || !session.id) {
+                throw new Error('Session ID not found. Cannot sort articles.');
+            }
+
+            try {
+                lambdaResponse = await fetchSortedArticlesForSession(session.id);
+                if (lambdaResponse?.sortedArticles) {
+                    console.log('Sorted articles:', lambdaResponse);
+                    setSortedArticles({ sortedArticles: lambdaResponse.sortedArticles });
+                    setToastMessage('Successfully sorted articles.');
+                    setToastSeverity('success');
+                    clearInterval(interval);
+                    setIsSorting(false);
+                    setSortingAction(null);
+                }
+            } catch (error) {
+                console.log(error);
+                setIsSorting(false);
+                setSortingAction(null);
+                setToastMessage('Unable to sort articles. Please try again.');
+                setToastSeverity('error');
+                clearInterval(interval);
+                throw error;
+            }
+        }, 5000);
+
+        // Use a timeout to cap the time spent waiting for the articles to be sorted to 3 minutes.
+        setTimeout(() => {
+            if (!lambdaResponse) {
+                setIsSorting(false);
+                setSortingAction(null);
+                setToastMessage('Timed out while sorting articles. Please try again.');
+                setToastSeverity('error');
+                if (interval) { clearInterval(interval); }
+            }
+        }, 180000);
     };
 
-    const handleGenerateNotes = async (articleId: number) => {
-        const article: Article | undefined = articles.find((article) => article.id === articleId);
-        if (!article) { throw new Error('Article not found. Cannot generate notes.'); }
+    // const handleGenerateNotes = async (articleId: number) => {
+    //     const article: Article | undefined = articles.find((article) => article.id === articleId);
+    //     if (!article) { throw new Error('Article not found. Cannot generate notes.'); }
 
-        setIsGeneratingNotes(true);
-        generateNotesForArticle(articleId).then((response) => {
-            console.log(response);
-            setArticleNotes((prevNotes) => ({ ...prevNotes, [article.title]: response.notes }));
-        }).catch((error) => {
-            console.log(error);
-            throw new Error('Unable to generate notes. Please try again.');
-        }).finally(() => {
-            setIsGeneratingNotes(false);
-        });
-    }
+    //     setIsGeneratingNotes(true);
+    //     generateNotesForArticle(articleId).then((response) => {
+    //         console.log(response);
+    //         setArticleNotes((prevNotes) => ({ ...prevNotes, [article.title]: response.notes }));
+    //     }).catch((error) => {
+    //         console.log(error);
+    //         throw new Error('Unable to generate notes. Please try again.');
+    //     }).finally(() => {
+    //         setIsGeneratingNotes(false);
+    //     });
+    // }
 
 
     return (
@@ -367,7 +424,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                                             <Typography variant="body2" style={{ color: '#888' }}><strong>Summary: </strong>{article.summary}</Typography>
                                         )}
                                     </Box>
-                                    <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: '12px' }}>
+                                    {/* <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: '12px' }}>
                                         <Button variant="outlined" color="primary" size="small" onClick={() => {
                                             if (!article.id) {
                                                 setLoadingError(new Error('No article ID found.'));
@@ -377,7 +434,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                                         }}>
                                         Generate Notes
                                         </Button>
-                                    </Box>
+                                    </Box> */}
                                 </Grid>
                             ))}
 
@@ -389,7 +446,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                 </Grid>
             </Grid>
 
-            <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto' }}>
+            <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', marginBottom: '64px' }}>
                 <Grid item xs={12}>
                     <Accordion
                         expanded={accordionExpanded.sortedArticles}
@@ -415,32 +472,21 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                             )}
 
                             {!isSorting && sortedArticles && sortedArticles?.sortedArticles.length > 0 && sortedArticles.sortedArticles.map((article, index) => {
-                                let reasons: string;
-                                if (article.reasons) {
-                                    reasons = article.reasons.join(', ');
-                                } else {
-                                    reasons = 'N/A';
-                                }
-
-                                let informationFlow: string;
-                                if (article.informationFlow) {
-                                    informationFlow = article.informationFlow.join(', ');
-                                } else {
-                                    informationFlow = 'N/A';
-                                }
-
-                                const matchingArticle: Article | undefined = articles.find((userArticle) => userArticle.title === article.title);
+                                let matchingArticle: Article | undefined = articles.find((userArticle) => userArticle.title === article.title);
                                 if (!matchingArticle) {
-                                    throw new Error('Matching article not found.');
+                                    // Attempt to find the article by ID.
+                                    matchingArticle = articles.find((userArticle) => userArticle.id === article.id);
+                                }
+
+                                if (!matchingArticle) {
+                                    return null;
                                 }
 
                                 return (
-                                    <Grid item xs={12} key={index}>
-                                        <div>
-                                            <h3>{index + 1}. <a href={matchingArticle.url}>{article.title}</a></h3>
-                                            <p>Reasons: {reasons}</p>
-                                            <p>Flow of Info: {informationFlow}</p>
-                                        </div>
+                                    <Grid item xs={12} key={index} sx={{ marginBottom: '16px' }}>
+                                        <Typography variant="body1" gutterBottom><strong>{article.sort}. <a href={matchingArticle.url} target='_blank' rel='noreferrer'>{article.title}</a></strong></Typography>
+                                        <Typography variant="body2" gutterBottom><strong>Reasons: </strong>{article.reason}</Typography>
+                                        <Typography variant="body2" gutterBottom><strong>Flow of Info: </strong>{article.informationFlow}</Typography>
                                     </Grid>
                                 );
                             })}
@@ -453,7 +499,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                 </Grid>
             </Grid>
 
-            <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', marginBottom: '64px' }}>
+            {/* <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', marginBottom: '64px' }}>
                 <Grid item xs={12}>
                     <Accordion
                         expanded={accordionExpanded.userNotes}
@@ -489,7 +535,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                         </AccordionDetails>
                     </Accordion>
                 </Grid>
-            </Grid>
+            </Grid> */}
 
             <Modal open={isModalOpen} onClose={handleModalClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <>

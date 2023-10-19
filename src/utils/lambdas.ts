@@ -21,6 +21,5 @@ export const buildResponse = (event: APIGatewayProxyEvent, statusCode: number, b
 };
 
 export const getUserId = (event: APIGatewayProxyEvent): string | undefined => {
-    console.log("🚀 ~ file: lambdas.ts:25 ~ getUserId ~ event.requestContext.authorizer?.claims:", event.requestContext.authorizer?.claims);
     return event.requestContext.authorizer?.claims?.sub as string | undefined;
 }

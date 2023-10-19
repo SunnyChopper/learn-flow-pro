@@ -3,8 +3,9 @@ export interface SortedArticles {
 }
 
 export interface SortedArticle {
+    id: number;
     title: string;
     sort: number;
-    reasons: string[];
-    informationFlow: string[];
+    reason: string;
+    informationFlow: string;
 }

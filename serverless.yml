@@ -20,24 +20,31 @@ provider:
     REACT_APP_DB_NAME: ${env:REACT_APP_DB_NAME}
     REACT_APP_DB_USERNAME: ${env:REACT_APP_DB_USERNAME}
     REACT_APP_DB_PASSWORD: ${env:REACT_APP_DB_PASSWORD}
-    
-# you can add statements to the Lambda function's IAM Role here
-#  iam:
-#    role:
-#      statements:
-#        - Effect: "Allow"
-#          Action:
-#            - "s3:ListBucket"
-#          Resource: { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "ServerlessDeploymentBucket" } ] ]  }
-#        - Effect: "Allow"
-#          Action:
-#            - "s3:PutObject"
-#          Resource:
-#            Fn::Join:
-#              - ""
-#              - - "arn:aws:s3:::"
-#                - "Ref" : "ServerlessDeploymentBucket"
-#                - "/*"
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:*
+          Resource: "arn:aws:s3:::*"
+        - Effect: Allow
+          Action:
+            - apigateway:*
+          Resource: "arn:aws:apigateway:*::/*"
+        - Effect: "Allow"
+          Action:
+            - "lambda:InvokeFunction"
+          Resource: "*"
+        - Effect: "Allow"
+          Action:
+            - "dynamodb:DescribeTable"
+            - "dynamodb:Query"
+            - "dynamodb:Scan"
+            - "dynamodb:GetItem"
+            - "dynamodb:PutItem"
+            - "dynamodb:UpdateItem"
+            - "dynamodb:DeleteItem"
+          Resource: "*"
 
 layers:
   shared:
@@ -50,8 +57,10 @@ layers:
 
 plugins:
   - serverless-dotenv-plugin
-  - serverless-offline
+  - serverless-finch
+  - serverless-dynamodb
   - serverless-esbuild
+  - serverless-offline
 
 package:
   individually: true
@@ -160,6 +169,19 @@ resources:
         PubliclyAccessible: true
         StorageType: gp2
         MultiAZ: false
+    SortingResultsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: learnflow-pro-sorting-results
+        AttributeDefinitions:
+          - AttributeName: sessionId
+            AttributeType: N
+        KeySchema:
+          - AttributeName: sessionId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
     ApiGatewayAuthorizer:
       Type: AWS::ApiGateway::Authorizer
       Properties:
@@ -315,8 +337,8 @@ functions:
             claims:
               - email
               - sub
-  sortArticlesForLearningSession:
-    handler: src/handlers/Articles.sortArticlesHandler
+  invokeSortingArticles:
+    handler: src/handlers/Articles.invokeSortingArticlesHandler
     layers:
       - !Ref SharedLambdaLayer
     events:
@@ -331,6 +353,24 @@ functions:
             claims:
               - email
               - sub
+  sortArticlesProcessor:
+    handler: src/handlers/Articles.sortArticlesHandler
+    timeout: 180
+    layers:
+      - !Ref SharedLambdaLayer
+  pollForSortedArticles:
+    handler: src/handlers/Articles.pollForSortedArticlesHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/sessions/sort
+          method: get
+          cors: true
+          request:
+            parameters:
+              querystrings:
+                sessionId: true
   generateNotesForArticle:
     handler: src/handlers/Articles.generateNotesHandler
     layers:
@@ -486,6 +526,21 @@ functions:
 
 useDotenv: true
 custom:
+  esbuild:
+    exclude: []
+  client:
+    bucketName: turbolearnai.com
+    distributionFolder: build
+    indexDocument: index.html
+    errorDocument: index.html
+  dynamodb:
+    stages:
+      - dev
+    start:
+      port: 8000
+      migrate: true
+    migration:
+      dir: 'migrations'
   dotenv:
     include:
       - REACT_APP_OPENAI_API_KEY
