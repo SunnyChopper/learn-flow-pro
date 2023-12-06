@@ -8,11 +8,13 @@ import { Note } from 'src/entity/Note';
 
 // Services
 import LearningSessionService from '/opt/services/LearningSessionService';
+
 import ArticleService from '/opt/services/ArticleService';
 import NotesService from '/opt/services/NotesService';
 
 // Utils
 import { buildResponse, getUserId } from 'src/utils/lambdas';
+import { getOpenAIApiKey } from 'src/utils/secrets';
 
 export const getSessionHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
     const userId = getUserId(event);
@@ -30,9 +32,20 @@ export const getSessionHandler = async (event: APIGatewayProxyEvent): Promise<AP
         return buildResponse(event, 400, { message: 'Invalid session id.' });
     }
 
-    const sessionService = new LearningSessionService();
-    const session = await sessionService.getSession(userId, sessionId);
-    return buildResponse(event, 200, session);
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+    } catch (error) {
+        return buildResponse(event, 500, { message: 'Error connecting to secrets manager.' });
+    }
+
+    const sessionService = new LearningSessionService(openAIApiKey);
+    try {
+        const session = await sessionService.getSession(userId, sessionId);
+        return buildResponse(event, 200, session);
+    } catch (error) {
+        return buildResponse(event, 500, { message: `Error getting session: ${error}` });
+    }
 }
 
 export const getUserSessionsHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -41,7 +54,14 @@ export const getUserSessionsHandler = async (event: APIGatewayProxyEvent): Promi
         return buildResponse(event, 400, { message: 'Invalid user id.' });
     }
 
-    const sessionService = new LearningSessionService();
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+    } catch (error) {
+        return buildResponse(event, 500, { message: 'Error connecting to secrets manager.' });
+    }
+
+    const sessionService = new LearningSessionService(openAIApiKey);
     const sessions = await sessionService.getSessions(userId);
     return buildResponse(event, 200, sessions);
 }
@@ -52,7 +72,14 @@ export const getNotesForLearningSessionHandler = async (event: APIGatewayProxyEv
         return buildResponse(event, 400, { message: 'Invalid session id.' });
     }
 
-    const articlesService: ArticleService = new ArticleService("openai", "gpt-3.5-turbo-16k", "precise");
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+    } catch (error) {
+        return buildResponse(event, 500, { message: 'Error connecting to secrets manager.' });
+    }
+
+    const articlesService: ArticleService = new ArticleService(openAIApiKey, "openai", "gpt-3.5-turbo-16k", "precise");
     const articles: Article[] = await articlesService.getArticlesForSession(parseInt(sessionId));
     if (articles.length === 0) {
         return buildResponse(event, 200, []);
@@ -68,8 +95,15 @@ export const createSessionHandler = async (event: APIGatewayProxyEvent): Promise
         return buildResponse(event, 400, { message: 'Invalid request body.' });
     }
 
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+    } catch (error) {
+        return buildResponse(event, 500, { message: 'Error connecting to secrets manager.' });
+    }
+
     const session = JSON.parse(event.body) as LearningSession;
-    const sessionService = new LearningSessionService();
+    const sessionService = new LearningSessionService(openAIApiKey);
     const newSession = await sessionService.createSession(session);
     return buildResponse(event, 200, newSession);
 }

@@ -13,7 +13,6 @@ provider:
     REACT_APP_USER_POOL_ID: ${env:REACT_APP_USER_POOL_ID}
     REACT_APP_USER_POOL_CLIENT_ID: ${env:REACT_APP_USER_POOL_CLIENT_ID}
     REACT_APP_API_BASE_URL: ${env:REACT_APP_API_BASE_URL}
-    REACT_APP_MEDIUM_API_KEY: ${env:REACT_APP_MEDIUM_API_KEY}
     REACT_APP_ALLOWED_ORIGINS: ${env:REACT_APP_ALLOWED_ORIGINS}
     REACT_APP_DB_HOST: ${env:REACT_APP_DB_HOST}
     REACT_APP_DB_PORT: ${env:REACT_APP_DB_PORT}
@@ -45,6 +44,26 @@ provider:
             - "dynamodb:UpdateItem"
             - "dynamodb:DeleteItem"
           Resource: "*"
+        - Effect: "Allow"
+          Action:
+            - "cognito-idp:DeleteUserPool"
+            - "cognito-idp:DeleteUserPoolClient"
+            - "cognito-idp:DescribeUserPool"
+            - "cognito-idp:DescribeUserPoolClient"
+            - "cognito-idp:UpdateUserPool"
+            - "cognito-idp:UpdateUserPoolClient"
+            - "cognito-idp:ListUserPoolClients"
+            - "cognito-idp:ListUserPools"
+            - "cognito-idp:ListUsers"
+            - "cognito-idp:ListGroups"
+            - "cognito-idp:ListIdentityProviders"
+            - "cognito-idp:ListResourceServers"
+          Resource: "*"
+        - Effect: "Allow"
+          Action:
+            - "secretsmanager:GetSecretValue"
+          Resource: "*"
+
 
 layers:
   shared:
@@ -197,14 +216,101 @@ resources:
 
 functions:
   # --- Auth --- #
+  
   preSignUp:
     handler: src/handlers/Auth.preSignUpHandler
     events:
       - cognitoUserPool:
-          pool: CognitoUserPool
+          pool: ${self:custom.userPoolName}
           trigger: PreSignUp
+          existing: true
 
-  # --- Learning Sessions --- #
+  getUserMembership:
+    handler: src/handlers/Auth.getUserMembershipHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/user/membership
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+
+  createFreeMembership:
+    handler: src/handlers/Auth.createFreeMembershipHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/user/membership/free
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+
+  updateMembership:
+    handler: src/handlers/Auth.updateMembershipHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/user/membership
+          method: put
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+
+  # --- Checkout --- #
+
+  createCheckoutSession:
+    handler: src/handlers/Checkout.createCheckoutSessionHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/create-checkout-session
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+
+  stripeWebhooks:
+    handler: src/handlers/Checkout.stripeWebhooksHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/stripe/webhooks
+          method: post
+          cors: true
+
+  # --- Stats --- #
+
+  getNumberOfArticlesSortedForDate:
+    handler: src/handlers/Stats.getNumberOfArticlesSortedForDateHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/stats/articles/sorted
+          method: get
+          cors: true
+          request:
+            parameters:
+              querystrings:
+                date: true
+
+  # --- Recommendations --- #
+
   getRecommendations:
     handler: src/handlers/Recommendations.getRecommendationsHandler
     layers:
@@ -218,6 +324,7 @@ functions:
             type: COGNITO_USER_POOLS
             authorizerId:
               Ref: ApiGatewayAuthorizer
+  
   generateTopicRecommendations:
     handler: src/handlers/Recommendations.generateTopicRecommendationsHandler
     layers:
@@ -231,38 +338,9 @@ functions:
             type: COGNITO_USER_POOLS
             authorizerId:
               Ref: ApiGatewayAuthorizer
-  getLearningSession:
-    handler: src/handlers/Sessions.getSessionHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/sessions
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
-            claims:
-              - email
-              - sub
-  getUserLearningSessions:
-    handler: src/handlers/Sessions.getUserSessionsHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/user/sessions
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
-            claims:
-              - email
-              - sub
+  
+  # --- Learning Sessions --- #
+
   createLearningSession:
     handler: src/handlers/Sessions.createSessionHandler
     layers:
@@ -279,48 +357,7 @@ functions:
             claims:
               - email
               - sub
-  getArticlesForLearningSession:
-    handler: src/handlers/Articles.getArticlesHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/articles
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
-            claims:
-              - email
-              - sub
-  getNotesForArticle:
-    handler: src/handlers/Articles.getNotesForArticleHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/articles/notes
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
-  getNotesForLearningSession:
-    handler: src/handlers/Sessions.getNotesForLearningSessionHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/sessions/notes
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
+
   createArticleForLearningSession:
     handler: src/handlers/Articles.createArticleHandler
     layers:
@@ -337,6 +374,90 @@ functions:
             claims:
               - email
               - sub
+
+  getLearningSession:
+    handler: src/handlers/Sessions.getSessionHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/sessions
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  
+  getUserLearningSessions:
+    handler: src/handlers/Sessions.getUserSessionsHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/user/sessions
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  
+  getArticlesForLearningSession:
+    handler: src/handlers/Articles.getArticlesHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/articles
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  
+  # --- Notes --- #
+
+  getNotesForLearningSession:
+    handler: src/handlers/Sessions.getNotesForLearningSessionHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/sessions/notes
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+
+  getNotesForArticle:
+    handler: src/handlers/Articles.getNotesForArticleHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/articles/notes
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  
+  # --- Article Sorting --- #
+
   invokeSortingArticles:
     handler: src/handlers/Articles.invokeSortingArticlesHandler
     layers:
@@ -353,11 +474,13 @@ functions:
             claims:
               - email
               - sub
+  
   sortArticlesProcessor:
     handler: src/handlers/Articles.sortArticlesHandler
     timeout: 180
     layers:
       - !Ref SharedLambdaLayer
+  
   pollForSortedArticles:
     handler: src/handlers/Articles.pollForSortedArticlesHandler
     layers:
@@ -371,6 +494,9 @@ functions:
             parameters:
               querystrings:
                 sessionId: true
+  
+  # --- Generators --- #
+
   generateNotesForArticle:
     handler: src/handlers/Articles.generateNotesHandler
     layers:
@@ -384,6 +510,7 @@ functions:
             type: COGNITO_USER_POOLS
             authorizerId:
               Ref: ApiGatewayAuthorizer
+  
   generateSummaryForArticle:
     handler: src/handlers/Articles.generateSummaryHandler
     layers:
@@ -397,22 +524,9 @@ functions:
             type: COGNITO_USER_POOLS
             authorizerId:
               Ref: ApiGatewayAuthorizer
-  getGoals:
-    handler: src/handlers/Goals.getGoalsHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/goals
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
-            claims:
-              - email
-              - sub
+  
+  # --- Goals --- #
+
   createGoal:
     handler: src/handlers/Goals.createGoalHandler
     layers:
@@ -429,6 +543,24 @@ functions:
             claims:
               - email
               - sub
+
+  getGoals:
+    handler: src/handlers/Goals.getGoalsHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/goals
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+            claims:
+              - email
+              - sub
+  
   updateGoal:
     handler: src/handlers/Goals.updateGoalHandler
     layers:
@@ -442,6 +574,7 @@ functions:
             type: COGNITO_USER_POOLS
             authorizerId:
               Ref: ApiGatewayAuthorizer
+  
   deleteGoal:
     handler: src/handlers/Goals.deleteGoalHandler
     layers:
@@ -458,45 +591,9 @@ functions:
             claims:
               - email
               - sub
-  getUserKnowledgeBases:
-    handler: src/handlers/KnowledgeBases.getUserKnowledgeBasesHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/user/knowledge-bases
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
-  getKnowledgeBase:
-    handler: src/handlers/KnowledgeBases.getKnowledgeBaseHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/knowledge-bases
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
-  getArticlesForKnowledgeBase:
-    handler: src/handlers/KnowledgeBases.getArticlesForKnowledgeBaseHandler
-    layers:
-      - !Ref SharedLambdaLayer
-    events:
-      - http:
-          path: /api/knowledge-bases/articles
-          method: get
-          cors: true
-          authorizer:
-            type: COGNITO_USER_POOLS
-            authorizerId:
-              Ref: ApiGatewayAuthorizer
+  
+  # --- Knowledge Bases --- #
+  
   createKnowledgeBase:
     handler: src/handlers/KnowledgeBases.createKnowledgeBaseHandler
     layers:
@@ -510,6 +607,7 @@ functions:
             type: COGNITO_USER_POOLS
             authorizerId:
               Ref: ApiGatewayAuthorizer
+  
   createKnowledgeBaseEntry:
     handler: src/handlers/KnowledgeBases.createKnowledgeBaseEntryHandler
     layers:
@@ -524,8 +622,52 @@ functions:
             authorizerId:
               Ref: ApiGatewayAuthorizer
 
+  getUserKnowledgeBases:
+    handler: src/handlers/KnowledgeBases.getUserKnowledgeBasesHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/user/knowledge-bases
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  
+  getKnowledgeBase:
+    handler: src/handlers/KnowledgeBases.getKnowledgeBaseHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/knowledge-bases
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  
+  getArticlesForKnowledgeBase:
+    handler: src/handlers/KnowledgeBases.getArticlesForKnowledgeBaseHandler
+    layers:
+      - !Ref SharedLambdaLayer
+    events:
+      - http:
+          path: /api/knowledge-bases/articles
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+  
+
 useDotenv: true
 custom:
+  userPoolName: learnflow-pro-userpool
   esbuild:
     exclude: []
   client:
@@ -543,16 +685,16 @@ custom:
       dir: 'migrations'
   dotenv:
     include:
-      - REACT_APP_OPENAI_API_KEY
       - REACT_APP_IDENTITY_POOL_ID
       - REACT_APP_USER_POOL_REGION
       - REACT_APP_USER_POOL_ID
       - REACT_APP_USER_POOL_CLIENT_ID
       - REACT_APP_API_BASE_URL
-      - REACT_APP_MEDIUM_API_KEY
       - REACT_APP_ALLOWED_ORIGINS
       - REACT_APP_DB_HOST
       - REACT_APP_DB_PORT
       - REACT_APP_DB_NAME
       - REACT_APP_DB_USERNAME
       - REACT_APP_DB_PASSWORD
+      - REACT_APP_STRIPE_PUBLISHABLE_KEY
+      - REACT_APP_STRIPE_SECRET_KEY

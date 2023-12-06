@@ -34,9 +34,12 @@ import { SortedArticles } from 'src/contracts/SortArticles';
 
 // Entities
 import { LearningSession } from 'src/entity/LearningSession';
+import { Membership } from 'src/entity/Membership';
 import { Article } from 'src/entity/Article';
 import { Note } from 'src/entity/Note';
 
+// API
+import { getCurrentUserMembership, createFreeMembership } from 'src/api/auth';
 
 interface ArticleInput {
     title: string;
@@ -59,7 +62,11 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     const params = useParams<{ sessionId: string }>();
     const navigate = useNavigate();
 
+    // Auth
+    const [membership, setMembership] = useState<Membership | null>(null);
+
     // UI
+    const [toastUUID, setToastUUID] = useState<string>(''); // Used to force a re-render of the Toast component.
     const [toastMessage, setToastMessage] = useState<string>('');
     const [toastSeverity, setToastSeverity] = useState<AlertColor>('success');
     const [accordionExpanded, setAccordionExpanded] = useState<{ [key: string]: boolean }>({
@@ -91,6 +98,23 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     const [sortedArticles, setSortedArticles] = useState<SortedArticles | null>(null);
     const [session, setSession] = useState<LearningSession | null>(null);
     const [articles, setArticles] = useState<Article[]>([]);
+
+    useEffect(() => {
+        const fetchMembership = async () => {
+            setIsLoading(true);
+            const membership: Membership | null = await getCurrentUserMembership();
+            if (membership) {
+                setMembership(membership);
+                setIsLoading(false);
+            } else {
+                const freeMembership = await createFreeMembership();
+                setMembership(freeMembership);
+                setIsLoading(false);
+            }
+        }
+
+        fetchMembership();
+    }, []);
 
     useEffect(() => { 
         if (params.sessionId) {
@@ -198,6 +222,15 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     };
 
     const handleNewArticleSubmit = async () => {
+        console.log("🚀 ~ file: SessionDetailsPage.tsx:225 ~ handleNewArticleSubmit ~ membership:", membership)
+        console.log("🚀 ~ file: SessionDetailsPage.tsx:227 ~ handleNewArticleSubmit ~ membership.membershipLevel === 'Free':", membership?.membershipLevel === 'Free')
+        if ((!membership || membership.membershipLevel === 'Free') && articles.length >= 5) {
+            setToastUUID(new Date().getTime().toString());
+            setToastMessage('<p style="margin: 0;">You have reached the maximum number of articles for a free account. Please <a href="">upgrade</a> to add more articles.</p>');
+            setToastSeverity('error');
+            return;
+        }
+
         setResourceLoadingMap((prevMap) => ({ ...prevMap, addArticle: true }));
         console.log('Submitting new article:', newArticle);
         if (!session || !session.id) {
@@ -242,7 +275,8 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
 
         setIsSorting(true);
         setSortingAction('Generating/retrieving summaries for articles...');
-        setToastMessage('Generating/retrieving summaries for articles...');
+        setToastUUID(new Date().getTime().toString());
+        setToastMessage('<p style="margin: 0;">Generating/retrieving summaries for articles...</p>');
         setToastSeverity('info');
 
         // Check if all articles have summaries.
@@ -280,7 +314,8 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
         }
 
         setSortingAction('Sorting articles...');
-        setToastMessage('Sorting articles...');
+        setToastUUID(new Date().getTime().toString());
+        setToastMessage('<p style="margin: 0;">Sorting articles...</p>');
         setToastSeverity('info');
         setAccordionExpanded({
             userArticles: false,
@@ -294,7 +329,8 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
             console.log(error);
             setIsSorting(false);
             setSortingAction(null);
-            setToastMessage('Unable to sort articles. Please try again.');
+            setToastUUID(new Date().getTime().toString());
+            setToastMessage('<p style="margin: 0;">Unable to sort articles. Please try again.</p>');
             setToastSeverity('error');
             throw error;
         }
@@ -310,7 +346,8 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                 if (lambdaResponse?.sortedArticles) {
                     console.log('Sorted articles:', lambdaResponse);
                     setSortedArticles({ sortedArticles: lambdaResponse.sortedArticles });
-                    setToastMessage('Successfully sorted articles.');
+                    setToastUUID(new Date().getTime().toString());
+                    setToastMessage('<p style="margin: 0;">Successfully sorted articles.</p>');
                     setToastSeverity('success');
                     clearInterval(interval);
                     setIsSorting(false);
@@ -320,7 +357,8 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                 console.log(error);
                 setIsSorting(false);
                 setSortingAction(null);
-                setToastMessage('Unable to sort articles. Please try again.');
+                setToastUUID(new Date().getTime().toString());
+                setToastMessage('<p style="margin: 0;">Unable to sort articles. Please try again.</p>');
                 setToastSeverity('error');
                 clearInterval(interval);
                 throw error;
@@ -332,7 +370,8 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
             if (!lambdaResponse) {
                 setIsSorting(false);
                 setSortingAction(null);
-                setToastMessage('Timed out while sorting articles. Please try again.');
+                setToastUUID(new Date().getTime().toString());
+                setToastMessage('<p style="margin: 0;">Timed out while sorting articles. Please try again.</p>');
                 setToastSeverity('error');
                 if (interval) { clearInterval(interval); }
             }
@@ -359,7 +398,7 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
     return (
         <>
             {toastMessage && (
-                <Toast toastKey={toastMessage} message={toastMessage} severity={toastSeverity} />
+                <Toast toastKey={toastUUID} message={toastMessage} severity={toastSeverity} />
             )}
             <Header />
             <Grid container spacing={2} maxWidth="md" style={{ margin: '0 auto', marginTop: '0px' }}>
@@ -372,8 +411,8 @@ const SessionDetailsPage: React.FC<SessionDetailsPageProps> = () => {
                         <Button variant="text" color="primary" onClick={() => navigate(-1)} sx={{ fontSize: '12px' }}>&lt; Back to All Sessions</Button>
                     </Box>
                     <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', maxHeight: '32px' }}>
-                        <Button variant="outlined" disabled={isLoading || isSorting || (articles.length === 0)} size="small" color="primary" sx={{ marginRight: '8px' }} onClick={handleSortArticles}>Sort Articles</Button>
-                        <Button variant="outlined" size="small" color="secondary" onClick={handleModalOpen} disabled={isLoading || isSorting}>+ Add Article</Button>
+                        <Button variant="outlined" disabled={isLoading || isSorting || (articles.length === 0) || resourceLoadingMap.articles} size="small" color="primary" sx={{ marginRight: '8px' }} onClick={handleSortArticles}>Sort Articles</Button>
+                        <Button variant="outlined" size="small" color="secondary" onClick={handleModalOpen} disabled={isLoading || isSorting || resourceLoadingMap.articles}>+ Add Article</Button>
                     </Box>
                 </Grid>
                 <Grid item xs={12}>

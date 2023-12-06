@@ -1,12 +1,27 @@
-import { Auth } from 'aws-amplify';
+import { Auth, Amplify } from 'aws-amplify';
 import { CognitoUser } from '@aws-amplify/auth';
+
+
+/* Setup */
+
+export const initializeAuth = async (): Promise<void> => {
+    Amplify.configure({
+        Auth: {
+            identityPoolId: process.env.REACT_APP_IDENTITY_POOL_ID || '',
+            region: process.env.REACT_APP_USER_POOL_REGION || '',
+            userPoolId: process.env.REACT_APP_USER_POOL_ID || '',
+            userPoolWebClientId: process.env.REACT_APP_USER_POOL_CLIENT_ID || '',
+        }
+    });
+}
+
+/* User Authentication */
 
 export const login = async (username: string, password: string): Promise<CognitoUser> => {
     try {
-        const user = await Auth.signIn(username, password);
-        return user;
+        return await Auth.signIn(username, password);
     } catch (error) {
-        console.log('error signing in', error);
+        console.log('Error signing in: ', error);
         throw error;
     }
 };
@@ -15,7 +30,7 @@ export const logout = async (): Promise<void> => {
     try {
         await Auth.signOut();
     } catch (error) {
-        console.log('error signing out', error);
+        console.log('Error signing out: ', error);
         throw error;
     }
 };
@@ -79,6 +94,16 @@ export const changePassword = async (oldPassword: string, newPassword: string): 
     }
 }
 
+export const isLoggedIn = async (): Promise<boolean> => {
+    try {
+        const user = await Auth.currentAuthenticatedUser();
+        return user ? true : false;
+    } catch (error) {
+        console.log('error checking if user is logged in', error);
+        return false;
+    }
+}
+
 export const getCurrentUserJwtToken = async (): Promise<string> => {
     try {
         const currentSession = await Auth.currentSession();
@@ -91,6 +116,10 @@ export const getCurrentUserJwtToken = async (): Promise<string> => {
 };
 
 export const getCurrentUserId = async (): Promise<string> => {
+    if (!Auth || !Auth.currentSession) {
+        await initializeAuth();
+    }
+
     try {
         const currentSession = await Auth.currentSession();
         const userId: string = currentSession.getIdToken().payload.sub;

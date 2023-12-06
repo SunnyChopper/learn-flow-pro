@@ -7,6 +7,8 @@ const LoginPage: React.FC = () => {
     const navigate = useNavigate();
 
     const afterLogin = () => {
+        console.log('Login successful. Redirecting...');
+        
         navigate('/dashboard');
         
         if (window.sessionStorage.getItem('redirected')) {

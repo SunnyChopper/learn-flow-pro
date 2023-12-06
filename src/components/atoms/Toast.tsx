@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import Snackbar from '@mui/material/Snackbar';
-import MuiAlert, { AlertProps, AlertColor } from '@mui/material/Alert';
+import MuiAlert, { AlertColor } from '@mui/material/Alert';
+import ReactMarkdown from 'react-markdown';
+import rehypeRaw from "rehype-raw";
 
 interface ToastProps {
     message: string;
     severity: AlertColor;
     toastKey?: string;
-}
-
-const Alert = (props: AlertProps) => {
-    return <MuiAlert elevation={6} variant="filled" {...props} />;
 }
 
 const Toast = ({ message, severity, toastKey }: ToastProps) => {
@@ -33,11 +31,9 @@ const Toast = ({ message, severity, toastKey }: ToastProps) => {
 
     return (
         <Snackbar open={open} autoHideDuration={3000} onClose={handleClose}>
-            <div>
-                <Alert onClose={handleClose} severity={severity}>
-                    {message || 'Something went wrong'}
-                </Alert>
-            </div>
+            <MuiAlert elevation={6} variant="filled" onClose={handleClose} severity={severity}>
+                <ReactMarkdown rehypePlugins={[rehypeRaw] as any}>{message}</ReactMarkdown>
+            </MuiAlert>
         </Snackbar>
     );
 }

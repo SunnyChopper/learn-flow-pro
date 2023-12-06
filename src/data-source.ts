@@ -8,6 +8,7 @@ import { LearningSession } from "./entity/LearningSession";
 import { Recommendation } from "./entity/Recommendation";
 import { KnowledgeBase } from "./entity/KnowledgeBase";
 import { ArticleCache } from "./entity/ArticleCache";
+import { Membership } from "./entity/Membership";
 import { SessionTag } from "./entity/SessionTag";
 import { Priority } from "./entity/Priority";
 import { Article } from "./entity/Article";
@@ -33,7 +34,7 @@ export const AppDataSource = new DataSource({
     username: DB_USERNAME,
     password: DB_PASSWORD,
     database: DB_NAME,
-    synchronize: true,
+    synchronize: false,
     logging: false,
     entities: [
         KnowledgeBaseEntry,
@@ -42,12 +43,13 @@ export const AppDataSource = new DataSource({
         Recommendation,
         KnowledgeBase,
         ArticleCache,
+        Membership,
         SessionTag,
         Priority,
         Article,
         Goal,
         Note
     ],
-    migrations: [],
+    migrations: ["src/orm/migrations/*.ts"],
     subscribers: [],
 });

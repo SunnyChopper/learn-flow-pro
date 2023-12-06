@@ -14,6 +14,8 @@ import NotesService from '/opt/services/NotesService';
 
 // Utils
 import { buildResponse, getUserId } from 'src/utils/lambdas';
+import { getOpenAIApiKey } from 'src/utils/secrets';
+
 import { SortedArticles } from 'src/contracts/SortArticles';
 
 export const invokeSortingArticlesHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -68,7 +70,15 @@ export const invokeSortingArticlesHandler = async (event: APIGatewayProxyEvent):
 }
 
 export const sortArticlesHandler = async (event: { userId: string, sessionId: number, articles: Article[] }, context: any): Promise<void> => {
-    const sessionService: LearningSessionService = new LearningSessionService("openai", "gpt-3.5-turbo", "precise");
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+    } catch (error) {
+        console.error("Error connecting to secrets manager: ", error);
+        return;
+    }
+
+    const sessionService: LearningSessionService = new LearningSessionService(openAIApiKey, "openai", "gpt-3.5-turbo", "precise");
     const sortedArticles = await sessionService.sortArticlesByRelevance(event.userId, event.sessionId, event.articles);
 
     // Save the results to DynamoDB for polling
@@ -146,7 +156,14 @@ export const generateNotesHandler = async (event: APIGatewayProxyEvent): Promise
         return buildResponse(event, 400, { message: 'Invalid article id.' });
     }
 
-    const articleService: ArticleService = new ArticleService("openai", "gpt-3.5-turbo-16k", "precise");
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+    } catch (error) {
+        return buildResponse(event, 500, { message: 'Error connecting to secrets manager.' });
+    }
+
+    const articleService: ArticleService = new ArticleService(openAIApiKey, "openai", "gpt-3.5-turbo-16k", "precise");
     const notes: string = await articleService.generateNotesForArticleMarkdown(userId, articleId);
     return buildResponse(event, 200, { notes: notes });
 }
@@ -162,8 +179,15 @@ export const generateSummaryHandler = async (event: APIGatewayProxyEvent): Promi
         return buildResponse(event, 400, { message: 'Invalid article id.' });
     }
 
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+    } catch (error) {
+        return buildResponse(event, 500, { message: 'Error connecting to secrets manager.' });
+    }
+
     const useCache: boolean = event.body && JSON.parse(event.body).useCache !== undefined ? JSON.parse(event.body).useCache : true;
-    const articleService: ArticleService = new ArticleService("openai", "gpt-3.5-turbo-16k", "precise");
+    const articleService: ArticleService = new ArticleService(openAIApiKey, "openai", "gpt-3.5-turbo-16k", "precise");
     const summary: string = await articleService.generateSummaryForArticle(userId, articleId, useCache);
     return buildResponse(event, 200, { summary: summary });
 }
@@ -186,16 +210,35 @@ export const getArticlesHandler = async (event: APIGatewayProxyEvent): Promise<A
     }
 
     let sessionId: number | null = event.queryStringParameters?.sessionId ? parseInt(event.queryStringParameters.sessionId) : null;
+    console.log("🚀 ~ file: Articles.ts:213 ~ getArticlesHandler ~ sessionId:", sessionId)
 
-    if (sessionId) {
-        const articleService = new ArticleService();
-        const articles = await articleService.getArticlesForSession(sessionId);
-        return buildResponse(event, 200, articles);
-    } else {
-        const articleService = new ArticleService();
-        const articles = await articleService.getArticlesForUser(userId);
-        return buildResponse(event, 200, articles);
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+        console.log("🚀 ~ file: Articles.ts:217 ~ getArticlesHandler ~ openAIApiKey:", openAIApiKey)
+    } catch (error) {
+        return buildResponse(event, 500, { message: 'Error connecting to secrets manager.' });
     }
+
+    let articles: Article[] = [];
+    const articleService = new ArticleService(openAIApiKey);
+    if (sessionId) {
+        try {
+            articles = await articleService.getArticlesForSession(sessionId);
+        } catch (error) {
+            console.log("Error getting articles: ", error);
+            return buildResponse(event, 500, { message: `Error getting articles. ${error}` });
+        }
+    } else {
+        try {
+            articles = await articleService.getArticlesForUser(userId);
+        } catch (error) {
+            console.log("Error getting articles: ", error);
+            return buildResponse(event, 500, { message: `Error getting articles. ${error}` });
+        }
+    }
+
+    return buildResponse(event, 200, articles);
 }
 
 export const createArticleHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -219,7 +262,14 @@ export const createArticleHandler = async (event: APIGatewayProxyEvent): Promise
         console.log("Error getting author for article: ", error);
     }
 
-    const articleService = new ArticleService();
+    let openAIApiKey: string;
+    try {
+        openAIApiKey = await getOpenAIApiKey();
+    } catch (error) {
+        return buildResponse(event, 500, { message: 'Error connecting to secrets manager.' });
+    }
+
+    const articleService = new ArticleService(openAIApiKey);
     const newArticle = await articleService.createArticle(article);
     return buildResponse(event, 200, newArticle);
 }

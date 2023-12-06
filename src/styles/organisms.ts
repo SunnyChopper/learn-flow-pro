@@ -4,7 +4,7 @@ export const headerStyles = {
         textDecoration: 'none',
         '&:hover': {
             color: '#1a1a1a',
-            textDecoration: 'none'
+            textDecoration: 'none',
         }
     },
     logoutMenuItem: {
