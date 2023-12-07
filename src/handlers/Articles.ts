@@ -78,7 +78,7 @@ export const sortArticlesHandler = async (event: { userId: string, sessionId: nu
         return;
     }
 
-    const sessionService: LearningSessionService = new LearningSessionService(openAIApiKey, "openai", "gpt-3.5-turbo", "precise");
+    const sessionService: LearningSessionService = new LearningSessionService(openAIApiKey, "openai", "gpt-4-1106-preview", "precise");
     const sortedArticles = await sessionService.sortArticlesByRelevance(event.userId, event.sessionId, event.articles);
 
     // Save the results to DynamoDB for polling
