@@ -12,7 +12,7 @@ import Header from 'src/components/organisms/Header';
 import { Recommendation } from 'src/entity/Recommendation';
 
 // API
-import { generateTopicRecommendations, fetchRecommendations } from 'src/api/recommendations';
+import { generateTopicRecommendations } from 'src/api/recommendations';
 
 // Styles
 import { dashboardStyles } from 'src/styles/pages';
@@ -41,8 +41,7 @@ const DashboardPage = () => {
             <Header />
             <Grid container spacing={3} style={dashboardStyles.container} maxWidth="md">
                 <Grid item xs={12} style={{
-                    marginTop: '64px', marginBottom: '24px',
-                    padding: '16px', backgroundColor: '#e4e4e4',
+                    marginBottom: '24px', padding: '16px', backgroundColor: '#e4e4e4',
                     borderRadius: '8px', boxShadow: '0px 2px 8px -2px rgba(0,0,0,0.3)'
                 }}>
                     <Typography variant="h5" gutterBottom>Recommended Topics</Typography>
@@ -68,21 +67,23 @@ const DashboardPage = () => {
                         )}
                     </Grid>
                 </Grid>
+
                 <Grid item xs={12}>
+                    <Typography variant="body1" textAlign="center">The rest of the dashboard is under construction...</Typography>
+                </Grid>
+
+                {/* <Grid item xs={12}>
                     <Typography variant="h5" gutterBottom>Learning Sessions</Typography>
-                    {/* Add learning sessions section */}
                     <Button variant="contained" color="primary" size="small" onClick={handleViewAllSessions}>View All Sessions</Button>
                 </Grid>
                 <Divider style={{width:'100%', margin:'16px 0'}}/>
                 <Grid item xs={12}>
                     <Typography variant="h5" gutterBottom>Latest Notes</Typography>
-                    {/* Add latest notes section */}
                 </Grid>
                 <Divider style={{width:'100%', margin:'16px 0'}}/>
                 <Grid item xs={12}>
                     <Typography variant="h5"  >Learning Stats</Typography>
-                    {/* Add learning stats section */}
-                </Grid>
+                </Grid> */}
             </Grid>
         </>
     );
