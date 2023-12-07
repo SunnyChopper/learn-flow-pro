@@ -9,6 +9,8 @@
 /.pnp
 .pnp.js
 
+!nodejs/node_modules/services
+
 # testing
 /coverage
 
@@ -42,7 +44,6 @@ amplify/backend/amplify-meta.json
 amplify/backend/.temp
 build/
 dist/
-node_modules/
 aws-exports.js
 awsconfiguration.json
 amplifyconfiguration.json
